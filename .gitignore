@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.DS_Store
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# Data (to prevent uploading large files)
+data/raw/*
+data/processed/*
+data/metadata/*
+
+# Allow placeholders
+!data/raw/README.md
+!data/processed/README.md
+!data/metadata/README.md
+
+# Results (regenerable)
+results/*
+!results/figures/
+!results/tables/
+
+# IDE
+.vscode/
+.idea/
