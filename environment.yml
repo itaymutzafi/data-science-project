@@ -14,4 +14,7 @@ dependencies:
   - ipykernel
   - pip
   - pip:
-      []
+      - yfinance==0.2.37
+      - tqdm==4.66.2
+      - jupyterlab==4.0.0
+      -  # Optional / team additions (uncomment when needed): shap==0.45.0

@@ -1,4 +1,15 @@
+"""Package entrypoint for `src`.
+
+This package contains skeletal modules for the project. Implementations
+are intentionally absent so the team can implement them as coursework.
+Import modules via `import src.config` or `from src import config`.
 """
-Initialization for the project source code.
-Modules will be added and expanded once the project topic is finalized.
-"""
+
+__all__ = [
+    "config",
+    "data_access",
+    "transformers",
+    "preprocessing",
+    "trainer",
+    "evaluation",
+]

@@ -1,24 +1,32 @@
-from typing import Dict, Any
-import pandas as pd
-from sklearn.base import BaseEstimator
-from sklearn.metrics import accuracy_score, f1_score
+"""Evaluation module (skeleton).
+
+Defines the business and technical metrics used in the project. Implementations
+are intentionally omitted and should be implemented when the modeling
+decisions are finalized.
+"""
+
+from typing import Any
 
 
-def evaluate_basic(
-    model: BaseEstimator,
-    X_test: pd.DataFrame,
-    y_test: pd.Series
-) -> Dict[str, Any]:
+def calculate_sharpe_ratio(returns, risk_free_rate: float = 0.0):
+    """Compute (annualized) Sharpe ratio for a daily returns series.
+
+    To be implemented.
     """
-    Compute simple evaluation metrics.
-    More advanced evaluation will be added later based on the project needs.
+    raise NotImplementedError("calculate_sharpe_ratio to be implemented")
 
-    Returns
-    -------
-    dict with accuracy and F1 score.
+
+def evaluate_regression(y_true, y_pred):
+    """Compute regression & business metrics (MSE, R2, DA, Sharpe).
+
+    To be implemented.
     """
-    y_pred = model.predict(X_test)
-    return {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "f1_weighted": f1_score(y_test, y_pred, average="weighted")
-    }
+    raise NotImplementedError("evaluate_regression to be implemented")
+
+
+def print_eval(metrics, model_name: str = "Model"):
+    """Pretty-print evaluation metrics for reports.
+
+    To be implemented.
+    """
+    raise NotImplementedError("print_eval to be implemented")
