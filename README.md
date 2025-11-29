@@ -1,109 +1,99 @@
-# Data Science Workshop Project - <Insert Project Title Here>
+# Stock Market Prediction Pipeline (AAPL)
 
-This repository contains the full workflow of our group project in the Data Science course at Tel Aviv University.
+**Workshop in Data Science — Team 003**  
+_(Itay, Moran, Shaked)_
 
-The project topic will be finalized and approved in class during the upcoming week.  
-Once confirmed, all scientific background, research questions, and methodological details will be inserted into this document and the relevant project folders.
-
----
-
-## 1. Project Overview
-
-### 1.1 Topic (to be completed)
-
-<Insert a short description of the selected topic. For example: analysis of financial time series, market behavior, or prediction models for stock dynamics.>
-
-### 1.2 Motivation (to be completed)
-
-<Explain why this topic is relevant, interesting, and suitable for a full data science workflow.>
-
-### 1.3 Research Questions (to be refined)
-
-Possible structure for later use:
-
-- Question 1: <Insert>
-- Question 2: <Insert>
-- Question 3: <Insert>
-
-The final research questions will be defined once the dataset and scope are confirmed.
+This repository contains an end-to-end machine learning pipeline for predicting short-term stock movements (Log Returns) of Apple Inc. (AAPL). The project is designed with a "Notebook as a Report" philosophy, where the main narrative lives in Jupyter notebooks while the heavy lifting is handled by a structured Python package (`src/`).
 
 ---
 
-## 2. Repository Structure
+## 📂 Repository Structure
 
-- **data/**  
-  Raw and processed datasets (to be added once the project topic is approved).
+The project follows a domain-driven hybrid architecture:
 
-  - `raw/` — original data files
-  - `processed/` — cleaned or transformed versions
-  - `metadata/` — data dictionaries, variable documentation
-
-- **notebooks/**  
-  Jupyter notebooks used during development.
-
-  - `exploration/` — initial EDA
-  - `modeling/` — feature engineering, model experiments
-  - `main.ipynb` — final linear project workflow
-
-- **src/**  
-  Python modules implementing the reusable parts of the analysis pipeline  
-  (loading, cleaning, modeling, evaluation).
-
-- **reports/**  
-  Presentations and written materials.
-
-  - Draft slides
-  - Final presentation
-  - Written summary or short paper
-
-- **literature/**  
-  Relevant course materials and external references.
-
-- **results/**  
-  Figures, tables, and evaluation outputs.
+```text
+├── data/               # Raw and processed datasets
+├── notebooks/          # Exploratory and development notebooks
+├── src/                # Source code (The "Engine")
+│   ├── data/           # Data ingestion and loading
+│   ├── features/       # Feature engineering (Transformers)
+│   ├── models/         # Model definitions (Baselines, ML, DL)
+│   ├── evaluation/     # Metrics, plotting, and analysis tools
+│   └── utils/          # Configuration and helpers
+├── tests/              # Unit tests for the pipeline
+├── Final_Project_Report.ipynb  # Main project report (The "Story")
+└── requirements.txt    # Project dependencies
+```
 
 ---
 
-## 3. Planned Methodology
+## 🚀 Getting Started
 
-Once the topic is approved, the project will follow the standard data science pipeline:
+### Prerequisites
 
-1. Data collection and documentation
-2. Exploratory data analysis
-3. Preprocessing and feature engineering
-4. Model development
-5. Evaluation and validation
-6. Interpretation and communication of results
+- Python 3.12+
+- Git
 
-Each part will be added to the repository in the appropriate folders.
+### Installation
+
+1.  **Clone the repository:**
+
+    ```bash
+    git clone <repo_url>
+    cd data-science-project
+    ```
+
+2.  **Set up the environment (Recommended):**
+
+    ```bash
+    python3.12 -m venv .venv
+    source .venv/bin/activate
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    ```
+
+3.  **Register the Jupyter Kernel:**
+    ```bash
+    python -m ipykernel install --user --name=ds-project-venv --display-name "Python (DS Project .venv)"
+    ```
+
+### Running the Project
+
+1.  **Run Tests:** Verify that the environment and logic are correct.
+
+    ```bash
+    pytest tests/
+    ```
+
+2.  **Open the Report:**
+    Start Jupyter Lab/Notebook and open `Final_Project_Report.ipynb`.  
+    **Important:** Ensure you select the kernel **`Python (DS Project .venv)`**.
 
 ---
 
-## 4. Environment Setup
+## 🛠️ Methodology
 
-### Virtual Environment (Recommended)
+### 1. Problem Formulation
 
-1. **Create the environment:**
+We predict **Logarithmic Returns** ($Y_t$) instead of raw prices ($P_t$) to ensure stationarity, a critical assumption for many ML models.
 
-   ```bash
-   python3.12 -m venv .venv
-   ```
+### 2. Architecture
 
-2. **Activate and install dependencies:**
+We use a **Hybrid Architecture**:
 
-   ```bash
-   source .venv/bin/activate
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
+- **Object-Oriented (Classes):** For stateful components like Transformers (e.g., `LogReturnTransformer`) and Models. This allows integration with Scikit-Learn pipelines.
+- **Functional:** For stateless utilities like data loading and metric calculation.
 
-3. **Register Kernel for Jupyter:**
+### 3. Evaluation
 
-   ```bash
-   python -m ipykernel install --user --name=ds-project-venv --display-name "Python (DS Project .venv)"
-   ```
+We optimize for **MSE** (Statistical fit) but evaluate success using **Sharpe Ratio** (Financial risk-adjusted return) and **Directional Accuracy** (Trading utility).
 
-4. **Run Tests:**
-   ```bash
-   pytest tests/
-   ```
+---
+
+## 🧪 Testing
+
+The project includes a comprehensive test suite in `tests/` covering:
+
+- **Features:** Correctness of transformers (shapes, NaN handling).
+- **Models:** Interface compliance and baseline logic.
+- **Evaluation:** Mathematical correctness of metrics.
