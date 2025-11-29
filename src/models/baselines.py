@@ -59,3 +59,25 @@ class RandomBaseline:
             self.rng.normal(self.mu, self.sigma, size=len(X)),
             index=X.index
         )
+
+class MarketBenchmark:
+    """
+    Represents a passive 'Buy & Hold' strategy.
+    
+    For regression evaluation (MSE), this model predicts the historical mean return 
+    (Best Constant Predictor), which minimizes MSE for a constant prediction.
+    
+    For trading evaluation (Sharpe), the constant prediction (assuming it's positive)
+    results in a consistent 'Long' signal, effectively mimicking a Buy & Hold strategy
+    on the target asset.
+    """
+    def __init__(self):
+        self.mu = 0.0
+        
+    def fit(self, y_train: pd.Series):
+        """Learn the historical mean return."""
+        self.mu = y_train.mean()
+        
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        """Predict the historical mean for all steps."""
+        return pd.Series(self.mu, index=X.index)

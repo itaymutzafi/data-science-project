@@ -1,6 +1,10 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+
 from statsmodels.tsa.stattools import adfuller
+import numpy as np
+from src.models.baselines import NaiveBaseline, RandomBaseline, MarketBenchmark
+from src.evaluation.metrics import evaluate_regression
+from IPython.display import display
 
 def check_stationarity(series: pd.Series, name: str) -> None:
     """Performs the Augmented Dickey-Fuller (ADF) test for stationarity.
@@ -21,28 +25,53 @@ def check_stationarity(series: pd.Series, name: str) -> None:
     status = "Stationary (Reject H0)" if is_stationary else "Non-Stationary (Fail to reject H0)"
     print(f"Result:        {status}")
 
-def plot_price_vs_returns(df: pd.DataFrame, target_col: str) -> None:
-    """Visualizes the contrast between raw prices and log-returns.
 
-    Generates a dual-axis plot showing the non-stationary price series
-    versus the stationary log-returns series.
-
+def run_baseline_analysis(y_train: pd.Series, y_test: pd.Series, X_test: pd.DataFrame) -> None:
+    """Runs and compares robust baselines: Naive, Random (Monte Carlo), and Market Benchmark.
+    
     Args:
-        df (pd.DataFrame): Dataframe containing 'Close' and target_col.
-        target_col (str): Name of the log-returns column.
+        y_train (pd.Series): Training target values.
+        y_test (pd.Series): Test target values.
+        X_test (pd.DataFrame): Test features (dummy for baselines).
     """
-    fig, axes = plt.subplots(2, 1, sharex=True)
-    
-    # Plot 1: Raw Price
-    axes[0].plot(df.index, df['Close'], label='Close Price', color='#1f77b4')
-    axes[0].set_title("Raw Price ($P_t$): Non-Stationary", fontweight='bold')
-    axes[0].legend(loc='upper left')
-    
-    # Plot 2: Log Returns
-    axes[1].plot(df.index, df[target_col], label='Log Returns', color='#ff7f0e', alpha=0.8)
-    axes[1].axhline(0, color='black', linewidth=0.8, linestyle='--')
-    axes[1].set_title("Log Returns ($Y_t$): Stationary", fontweight='bold')
-    axes[1].legend(loc='upper left')
-    
-    plt.tight_layout()
-    plt.show()
+    # 1. Naive Baseline (Zero Return)
+    naive = NaiveBaseline(strategy="zero")
+    y_pred_naive = naive.predict(X_test)
+    metrics_naive = evaluate_regression(y_test, y_pred_naive)
+
+    # 2. Monte Carlo Random Baseline (100 Runs)
+    n_simulations = 100
+    mse_list = []
+    sharpe_list = []
+
+    for i in range(n_simulations):
+        random_model = RandomBaseline(seed=i)
+        random_model.fit(y_train)
+        y_pred_random = random_model.predict(X_test)
+        m = evaluate_regression(y_test, y_pred_random)
+        mse_list.append(m['MSE'])
+        sharpe_list.append(m['Strategy Sharpe'])
+
+    metrics_random_avg = {
+        'MSE': np.mean(mse_list),
+        'Strategy Sharpe': np.mean(sharpe_list),
+        'Directional Accuracy': 0.5 # Expected for random
+    }
+
+    # 3. Market Benchmark (Buy & Hold)
+    market_bench = MarketBenchmark()
+    market_bench.fit(y_train)
+    y_pred_market = market_bench.predict(X_test)
+    metrics_market = evaluate_regression(y_test, y_pred_market)
+
+    # 4. Summary Table
+    results_df = pd.DataFrame({
+        'Naive (Zero)': metrics_naive,
+        'Random (MC Avg)': metrics_random_avg,
+        'Market (Buy&Hold)': metrics_market
+    }).T
+
+    # Filter for key metrics
+    results_df = results_df[['MSE', 'Strategy Sharpe', 'Directional Accuracy']]
+    print("--- Baseline Comparison ---")
+    display(results_df)

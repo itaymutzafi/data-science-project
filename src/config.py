@@ -26,12 +26,3 @@ class DataConfig:
     END_DATE = "YYYY-MM-DD"
 
     SEED = 42
-
-
-def set_seed(seed: int = None):
-    """Set random seeds for reproducibility.
-
-    Minimal helper; implementers may choose the RNGs to seed.
-    """
-    raise NotImplementedError("set_seed to be implemented by the team")
-
