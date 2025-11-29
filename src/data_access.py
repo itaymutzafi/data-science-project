@@ -8,6 +8,7 @@ team can implement them in a controlled, reviewed way.
 from pathlib import Path
 from typing import Optional
 import pandas as pd
+import yfinance as yf
 
 
 def load_csv(filename: str, folder: str = "raw") -> pd.DataFrame:
@@ -32,3 +33,13 @@ def fetch_yfinance(ticker: str, start_date: str, end_date: str, progress: Option
     Implementation should use `yfinance` or an approved data provider.
     """
     raise NotImplementedError("fetch_yfinance must be implemented by the team")
+
+
+def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
+    """
+    Fetches raw OHLCV data for initial research and stationarity tests.
+    """
+    print(f"Fetching {period} of data for {ticker}...")
+    df = yf.Ticker(ticker).history(period=period)
+    df.index = df.index.tz_localize(None) # Remove timezone for simplicity in plots
+    return df
