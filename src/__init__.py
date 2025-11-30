@@ -1,15 +1,20 @@
-"""Package entrypoint for `src`.
+"""Source code package for the Stock Market Prediction Pipeline.
 
-This package contains skeletal modules for the project. Implementations
-are intentionally absent so the team can implement them as coursework.
-Import modules via `import src.config` or `from src import config`.
+Exposes the main subpackages and configuration.
 """
+
+from . import config
+from . import data
+from . import features
+from . import models
+from . import evaluation
+from . import utils
 
 __all__ = [
     "config",
-    "data_access",
-    "transformers",
-    "preprocessing",
-    "trainer",
+    "data",
+    "features",
+    "models",
     "evaluation",
+    "utils",
 ]

@@ -1,28 +1,24 @@
-"""Project configuration (skeleton).
+"""Project configuration.
 
-This module defines global constants and project paths. Implementations
-and detailed values are intentionally minimal to let the team decide
-final naming and values.
+This module defines global constants and project paths.
 """
 
 from pathlib import Path
 
 
 class DataConfig:
-    """Global configuration constants.
-
-    Populate these fields when the team finalizes the environment and
-    dataset choices.
-    """
+    """Global configuration constants."""
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
     DATA_DIR = PROJECT_ROOT / "data"
 
-    # Example placeholders (edit before use)
-    TICKER = "<TICKER>"
-    BENCHMARK = "<BENCHMARK>"
+    # Data Settings
+    TICKER = "AAPL"
+    BENCHMARK = "^GSPC"  # S&P 500
     LOOKBACK_WINDOW = 30
     TEST_SIZE = 0.2
-    START_DATE = "YYYY-MM-DD"
-    END_DATE = "YYYY-MM-DD"
+    
+    # Date Range (None implies dynamic fetching or full available history)
+    START_DATE = None
+    END_DATE = None
 
     SEED = 42
