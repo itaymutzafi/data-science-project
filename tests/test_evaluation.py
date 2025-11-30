@@ -1,7 +1,8 @@
 """Tests for evaluation metrics."""
 
 import pandas as pd
-from src.evaluation.metrics import evaluate_regression, calculate_sharpe_ratio
+from src.evaluation import evaluate_regression
+from src.evaluation.metrics import calculate_sharpe_ratio
 
 def test_sharpe_ratio_calculation():
     """Test Sharpe Ratio logic."""

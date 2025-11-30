@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from src.features.preprocessing import LogReturnTransformer
+from src.features import LogReturnTransformer
 
 def test_log_return_transformer(sample_data):
     """Test that LogReturnTransformer correctly computes returns."""

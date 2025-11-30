@@ -21,3 +21,9 @@ def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
     df = yf.Ticker(ticker).history(period=period)
     df.index = df.index.tz_localize(None) # Remove timezone for simplicity in plots
     return df
+
+def load_csv(filepath: str) -> pd.DataFrame:
+    """
+    Loads data from a CSV file.
+    """
+    raise NotImplementedError("load_csv not implemented yet.")

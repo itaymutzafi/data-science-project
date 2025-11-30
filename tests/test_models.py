@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from src.models.baselines import NaiveBaseline, RandomBaseline
+from src.models import NaiveBaseline, RandomBaseline
 
 def test_naive_baseline(sample_data):
     """Test Naive Baseline (Zero Strategy)."""
