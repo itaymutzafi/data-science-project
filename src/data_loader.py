@@ -212,32 +212,3 @@ def merge_csv_by_column(
     print(f"Total rows: {len(main_df)}, Total columns: {len(main_df.columns)}")
     
     return output_path
-
-# Merge Open and Close columns from MSFT file
-    # Creates columns: "MSFT_20230101_20231231 - Open", "MSFT_20230101_20231231 - Close"
-main_file = fetch_and_save('AAPL', date(2023, 1, 1), date(2023, 12, 31))
-feature_file = fetch_and_save('MSFT', date(2023, 1, 1), date(2023, 12, 31))
-feature_file2 = fetch_and_save('GOOGL', date(2023, 1, 1), date(2023, 12, 31))
-"""
-merge_csv_by_column(
-    main_file=main_file,
-    feature_files=feature_file,
-    columns_to_merge=['Open', 'Close']
-)
-"""
-# Merge columns from multiple files
-# Creates columns with prefixes from filenames
-merge_csv_by_column(
-    main_file='AAPL_20230101_20231231.csv',
-    feature_files=[feature_file, feature_file2],
-    columns_to_merge=['Open', 'Close']
-)
-"""
-
-# Merge only Close price from S&P 500
-merge_csv_by_column(
-    main_file='AAPL_20230101_20231231.csv',
-    feature_files='^GSPC_20230101_20231231.csv',
-    columns_to_merge='Close'
-)
-"""
