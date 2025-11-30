@@ -42,19 +42,26 @@ The project follows a domain-driven hybrid architecture:
 ├── requirements.txt            # Pip requirements
 ├── data/
 │   └── raw/                    # Cached raw data (parquet)
+├── literature/                 # Project literature and materials
 ├── src/                        # Source code package
+│   ├── __init__.py
+│   ├── config.py               # Configuration settings
 │   ├── data/
-│   │   └── loader.py           # Data ingestion with local caching
+│   │   └── __init__.py         # Data loader exports
 │   ├── features/
+│   │   ├── __init__.py
 │   │   ├── indicators.py       # Technical indicators (RSI, MA)
 │   │   └── preprocessing.py    # Transformers (Log Returns)
 │   ├── models/
+│   │   ├── __init__.py         # Model exports
 │   │   ├── baselines.py        # Baseline models (Naive, CAPM)
 │   │   └── training.py         # Training logic
-│   └── evaluation/
-│       ├── analysis.py         # Statistical tests & analysis
-│       ├── metrics.py          # Performance metrics
-│       └── plots.py            # Visualization utilities
+│   ├── evaluation/
+│   │   ├── __init__.py         # Evaluation exports
+│   │   ├── analysis.py         # Statistical tests & analysis
+│   │   ├── metrics.py          # Performance metrics
+│   │   └── plots.py            # Visualization utilities
+│   └── utils/                  # Utility functions
 └── tests/                      # Unit tests
     ├── conftest.py
     ├── test_evaluation.py
