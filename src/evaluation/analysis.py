@@ -2,7 +2,7 @@ import pandas as pd
 
 from statsmodels.tsa.stattools import adfuller
 import numpy as np
-from src.models.baselines import NaiveBaseline, RandomBaseline, MarketBenchmark
+from src.models.baselines import NaiveBaseline, RandomBaseline, MarketBenchmark, CAPMBaseline
 from src.evaluation.metrics import evaluate_regression
 from IPython.display import display
 
@@ -26,13 +26,14 @@ def check_stationarity(series: pd.Series, name: str) -> None:
     print(f"Result:        {status}")
 
 
-def run_baseline_analysis(y_train: pd.Series, y_test: pd.Series, X_test: pd.DataFrame) -> None:
-    """Runs and compares robust baselines: Naive, Random (Monte Carlo), and Market Benchmark.
+def run_baseline_analysis(y_train: pd.Series, y_test: pd.Series, X_test: pd.DataFrame, X_train: pd.DataFrame = None) -> None:
+    """Runs and compares robust baselines: Naive, Random (Monte Carlo), Market Benchmark, and CAPM.
     
     Args:
         y_train (pd.Series): Training target values.
         y_test (pd.Series): Test target values.
-        X_test (pd.DataFrame): Test features (dummy for baselines).
+        X_test (pd.DataFrame): Test features.
+        X_train (pd.DataFrame, optional): Training features (needed for CAPM).
     """
     # 1. Naive Baseline (Zero Return)
     naive = NaiveBaseline(strategy="zero")
@@ -64,11 +65,24 @@ def run_baseline_analysis(y_train: pd.Series, y_test: pd.Series, X_test: pd.Data
     y_pred_market = market_bench.predict(X_test)
     metrics_market = evaluate_regression(y_test, y_pred_market)
 
-    # 4. Summary Table
+    # 4. CAPM Baseline
+    # Requires X_train for beta estimation if available, otherwise defaults
+    capm = CAPMBaseline()
+    if X_train is not None:
+        capm.fit(X_train, y_train)
+    else:
+        # Fallback if X_train not provided (though it should be)
+        capm.fit(pd.DataFrame(index=y_train.index), y_train) 
+        
+    y_pred_capm = capm.predict(X_test)
+    metrics_capm = evaluate_regression(y_test, y_pred_capm)
+
+    # 5. Summary Table
     results_df = pd.DataFrame({
         'Naive (Zero)': metrics_naive,
         'Random (MC Avg)': metrics_random_avg,
-        'Market (Buy&Hold)': metrics_market
+        'Market (Buy&Hold)': metrics_market,
+        'CAPM': metrics_capm
     }).T
 
     # Filter for key metrics

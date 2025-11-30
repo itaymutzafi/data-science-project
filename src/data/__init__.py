@@ -1,1 +1,1 @@
-from .loader import fetch_sample_data, load_csv
+from .loader import fetch_sample_data

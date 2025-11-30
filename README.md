@@ -15,10 +15,10 @@ The project follows a domain-driven hybrid architecture:
 ├── data/               # Raw and processed datasets
 ├── notebooks/          # Exploratory and development notebooks
 ├── src/                # Source code (The "Engine")
-│   ├── data/           # Data ingestion and loading
+│   ├── data/           # Data ingestion and loading (w/ Caching)
 │   ├── features/       # Feature engineering (Transformers)
-│   ├── models/         # Model definitions (Baselines, ML, DL)
-│   ├── evaluation/     # Metrics, plotting, and analysis tools
+│   ├── models/         # Model definitions (Baselines, CAPM, ML, DL)
+│   ├── evaluation/     # Metrics, plotting (ACF), and analysis tools
 │   └── utils/          # Configuration and helpers
 ├── tests/              # Unit tests for the pipeline
 ├── Final_Project_Report.ipynb  # Main project report (The "Story")

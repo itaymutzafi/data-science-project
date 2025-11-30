@@ -82,3 +82,21 @@ def plot_price_vs_returns(df: pd.DataFrame, target_col: str) -> None:
     
     plt.tight_layout()
     plt.show()
+
+def plot_autocorrelation(series: pd.Series, lags: int = 40):
+    """
+    Plots the Autocorrelation Function (ACF) to analyze serial correlation.
+    
+    Args:
+        series (pd.Series): Time series data (e.g., log returns).
+        lags (int): Number of lags to plot.
+    """
+    from statsmodels.graphics.tsaplots import plot_acf
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    plot_acf(series.dropna(), lags=lags, ax=ax, alpha=0.05)
+    ax.set_title(f"Autocorrelation (ACF) - {series.name}", fontweight='bold')
+    ax.set_xlabel("Lags")
+    ax.set_ylabel("Correlation")
+    plt.grid(True, alpha=0.3)
+    plt.show()
