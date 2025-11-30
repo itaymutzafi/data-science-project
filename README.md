@@ -30,37 +30,74 @@ The project follows a domain-driven hybrid architecture:
 ## 🚀 Getting Started
 
 ### Prerequisites
+# Stock Market Prediction Pipeline
 
-- Python 3.12+
-- Git
+## Project Structure
 
-### Installation
+```
+.
+├── Final_Project_Report.ipynb  # Main analysis notebook (The "Report")
+├── README.md                   # Project documentation
+├── environment.yml             # Conda environment specification
+├── requirements.txt            # Pip requirements
+├── data/
+│   └── raw/                    # Cached raw data (parquet)
+├── src/                        # Source code package
+│   ├── data/
+│   │   └── loader.py           # Data ingestion with local caching
+│   ├── features/
+│   │   ├── indicators.py       # Technical indicators (RSI, MA)
+│   │   └── preprocessing.py    # Transformers (Log Returns)
+│   ├── models/
+│   │   ├── baselines.py        # Baseline models (Naive, CAPM)
+│   │   └── training.py         # Training logic
+│   └── evaluation/
+│       ├── analysis.py         # Statistical tests & analysis
+│       ├── metrics.py          # Performance metrics
+│       └── plots.py            # Visualization utilities
+└── tests/                      # Unit tests
+    ├── conftest.py
+    ├── test_evaluation.py
+    ├── test_features.py
+    └── test_models.py
+```
 
-1.  **Clone the repository:**
+## Module Roles
 
+### `src.data`
+Handles data ingestion and storage.
+- **`loader.py`**: Fetches data from `yfinance` and implements **local caching** in `data/raw/` to prevent redundant API calls.
+
+### `src.features`
+Responsible for feature engineering and preprocessing.
+- **`preprocessing.py`**: Contains `LogReturnTransformer` to convert non-stationary prices to stationary log-returns.
+- **`indicators.py`**: Computes technical indicators like RSI and Moving Averages.
+
+### `src.models`
+Contains predictive models and baselines.
+- **`baselines.py`**: Implements benchmark models including:
+    - `NaiveBaseline`: Zero-return assumption.
+    - `RandomBaseline`: Monte Carlo simulation.
+    - `MarketBenchmark`: Buy & Hold strategy.
+    - **`CAPMBaseline`**: Capital Asset Pricing Model ($R_i = R_f + \beta(R_m - R_f)$).
+
+### `src.evaluation`
+Utilities for validating and visualizing results.
+- **`analysis.py`**: Runs stationarity tests (ADF) and baseline comparisons.
+- **`metrics.py`**: Calculates MSE, RMSE, MAE, R2, Sharpe Ratio, and Directional Accuracy.
+- **`plots.py`**: Generates academic-style figures, including **Autocorrelation (ACF)** and Walk-Forward Validation plots.
+
+## Setup & Usage
+
+1.  **Install Dependencies:**
     ```bash
-    git clone <repo_url>
-    cd data-science-project
-    ```
-
-2.  **Set up the environment (Recommended):**
-
-    ```bash
-    python3.12 -m venv .venv
-    source .venv/bin/activate
-    pip install --upgrade pip
     pip install -r requirements.txt
     ```
+2.  **Run the Report:**
+    Open `Final_Project_Report.ipynb` in Jupyter Lab/Notebook and execute all cells.
+    The notebook is self-contained and will fetch data automatically.
 
-3.  **Register the Jupyter Kernel:**
-    ```bash
-    python -m ipykernel install --user --name=ds-project-venv --display-name "Python (DS Project .venv)"
-    ```
-
-### Running the Project
-
-1.  **Run Tests:** Verify that the environment and logic are correct.
-
+3.  **Run Tests:**
     ```bash
     pytest tests/
     ```
