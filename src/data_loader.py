@@ -1,11 +1,11 @@
 import os
 import pandas as pd
 import yfinance as yf
-from datetime import date
-from typing import Union, List
+from datetime import date, datetime, timezone
+from typing import Union, List, Optional
+from yfinance import Ticker
 
-def fetch_and_save(
-    ticker: str, start_date: date, end_date: date, interval: str = "1d", folder: str = "raw") -> str:
+def fetch_and_save(ticker: Ticker, start_date: date, end_date: date, interval: str = "1d", folder: str = "raw") -> str:
     """
     Fetch historical stock data from Yahoo Finance and save it to CSV file(s).
 
@@ -14,7 +14,7 @@ def fetch_and_save(
 
     Parameters
     ----------
-    ticker : str 
+    ticker : Ticker
         Stock ticker symbol(s) (e.g., 'AAPL', ['AAPL', 'MSFT', 'GOOGL']).
     start_date : date,
         Start date for historical data.
@@ -37,20 +37,18 @@ def fetch_and_save(
     # Create the folder if it doesn't exist
     os.makedirs(data_folder, exist_ok=True)  
     
-    stock = yf.Ticker(ticker)
-    data = stock.history(start=start_date, end=end_date, interval=interval)
+    data = ticker.history(start=start_date, end=end_date, interval=interval)
         
-    filename = f"{ticker}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
+    filename = f"{ticker.ticker}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
     file_path = os.path.join(data_folder, filename)
         
     # Save to CSV
     data.to_csv(file_path)
         
-    print(f"Data for {ticker} saved to {file_path}")
+    print(f"Data for {ticker.ticker} saved to {file_path}")
     print(f"Fetched {len(data)} rows of data")
         
     return file_path
-
 
 def load_csv(filename: str, folder: str = "raw") -> pd.DataFrame:
     """
@@ -76,64 +74,118 @@ def load_csv(filename: str, folder: str = "raw") -> pd.DataFrame:
     path = os.path.join(project_root, "data", folder, filename)
     return pd.read_csv(path)
 
+def create_news_column(
+    ticker: str,
+    column_name: Optional[str] = None,
+    max_items: int = 20,
+    include_summary: bool = True
+) -> pd.DataFrame:
+    """
+    Build a single textual feature column from Yahoo Finance news items.
 
-def merge_csv_by_column(
+    Parameters
+    ----------
+    ticker : str
+        Ticker symbol to pull news for (e.g., 'AAPL', 'MSFT').
+    column_name : str, optional
+        Custom column name. Defaults to '{ticker}_news'.
+    max_items : int, optional
+        Maximum number of news articles to keep (default: 20).
+    include_summary : bool, optional
+        If True, append the news summary after the title for each row.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns:
+        - 'published': timezone-aware datetime of the article
+        - '<column_name>': concatenated text (title [+ summary])
+        - 'publisher': publisher name
+        - 'link': URL to the news item
+    """
+    column_name = column_name or f"{ticker}_news"
+    ticker_obj = yf.Ticker(ticker)
+
+    try:
+        raw_news = ticker_obj.get_news() or []
+    except Exception as exc:
+        raise RuntimeError(f"Failed to fetch news for {ticker}") from exc
+
+    rows: List[dict] = []
+    for item in raw_news[:max_items]:
+        publish_ts = item.get("providerPublishTime")
+        published_dt = (
+            datetime.fromtimestamp(publish_ts, tz=timezone.utc)
+            if publish_ts is not None
+            else None
+        )
+        title = (item.get("title") or "").strip()
+        summary = (item.get("summary") or "").strip()
+
+        text = title
+        if include_summary and summary:
+            text = f"{title} — {summary}"
+
+        rows.append(
+            {
+                "published": published_dt,
+                column_name: text,
+                "publisher": item.get("publisher"),
+                "link": item.get("link"),
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(columns=["published", column_name, "publisher", "link"])
+
+    return pd.DataFrame(rows)
+
+
+def merge_csv_by_date(
     main_file: str,
     feature_files: Union[str, List[str]],
-    columns_to_merge: Union[str, List[str]],
-    merge_column: str = "Date",
     folder: str = "raw",
     output_file: str = None,
     output_folder: str = None,
     how: str = "left"
 ) -> str:
     """
-    Merge selected columns from multiple CSV files into a main CSV file by a common column.
+    Merge multiple stock CSV files by Date, including only Open, Close, and Volume columns.
     
-    This generic function allows you to merge specific columns from feature CSV files
-    (e.g., S&P 500, NASDAQ, other stocks) into a main CSV file. The files are merged
-    based on a common column (e.g., Date, ID, Timestamp, etc.). Only the specified
-    columns are merged, and they are renamed with the format "PREFIX - COLUMN" to avoid conflicts.
-
     Parameters
     ----------
     main_file : str
-        Filename of the main/base CSV file (e.g., 'AAPL_20230101_20231231.csv').
+        Filename of the main CSV file (e.g., 'AAPL_20230101_20231231.csv').
     feature_files : str or list of str
-        Filename(s) of feature CSV files to merge into the main file.
-        Each CSV should be for one stock. Prefixes are auto-generated from filenames.
-        (e.g., 'MSFT_20230101_20231231.csv' or ['MSFT_20230101_20231231.csv', 'GOOGL_20230101_20231231.csv']).
-    columns_to_merge : str or list of str
-        Column name(s) to select and merge from all feature files (e.g., 'Open' or ['Open', 'Close']).
-        The same columns are extracted from each feature file and merged.
-    merge_column : str, optional
-        Name of the column to merge on (default: 'Date'). Can be any column type (date, string, number, etc.).
+        Filename(s) of stock CSV files to merge (e.g., 'MSFT_20230101_20231231.csv' or ['MSFT_...', 'GOOGL_...']).
     folder : str, optional
-        Subfolder under 'data' where input CSV files are located (default: 'raw').
+        Subfolder under 'data' where CSV files are located (default: 'raw').
     output_file : str, optional
-        Output filename. If None, will overwrite main_file.
+        Output filename. If None, overwrites main_file.
     output_folder : str, optional
         Output folder. If None, uses the same folder as input files.
     how : str, optional
         Type of merge (default: 'left'). Options: 'left', 'right', 'outer', 'inner'.
-
+    
     Returns
     -------
     str
         Path to the merged CSV file.
-
+    
+    Note
+    ----
+    Only Open, Close, and Volume columns are merged from feature files.
+    Main file keeps all its columns.
+    
+    Example
+    -------
+    >>> merge_csv_by_date('AAPL_20230101_20231231.csv', 'MSFT_20230101_20231231.csv')
     """
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_folder = os.path.join(project_root, "data", folder)
     
     # Normalize inputs: convert single values to lists for uniform processing
     feature_files_list = [feature_files] if isinstance(feature_files, str) else feature_files
-    
-    # Normalize columns_to_merge: if string, convert to list; if list, use as-is
-    if isinstance(columns_to_merge, str):
-        columns_to_merge_list = [columns_to_merge]
-    else:
-        columns_to_merge_list = columns_to_merge
     
     # Auto-generate prefixes from filenames (extract ticker symbol before first '_')
     # Extract just the filename if full paths are provided, then get ticker symbol
@@ -151,7 +203,7 @@ def merge_csv_by_column(
     
     print(f"Loading main file: {main_file}")
     main_df = pd.read_csv(main_path)
-    main_df.set_index(merge_column, inplace=True)
+    main_df.set_index("Date", inplace=True)
     
     # Merge each feature file
     for i, feature_file in enumerate(feature_files_list):
@@ -167,24 +219,20 @@ def merge_csv_by_column(
         
         print(f"Loading feature file: {feature_file}")
         feature_df = pd.read_csv(feature_path)
-        feature_df.set_index(merge_column, inplace=True)
+        feature_df.set_index("Date", inplace=True)
         
         # Get prefix for this file
         prefix = feature_prefixes_list[i]
         
-        # Check if columns exist in feature file and filter to only existing columns
-        cols_to_select = [col for col in columns_to_merge_list if col in feature_df.columns]
-        missing_cols = [col for col in columns_to_merge_list if col not in feature_df.columns]
+        # Select only Open, Close, and Volume columns
+        columns_to_merge = ['Open', 'Close', 'Volume']
+        available_cols = [col for col in columns_to_merge if col in feature_df.columns]
         
-        if missing_cols:
-            print(f"Warning: Columns {missing_cols} not found in {feature_file}. Available columns: {list(feature_df.columns)}")
-        
-        if not cols_to_select:
-            print(f"Warning: No valid columns to merge from {feature_file}. Skipping...")
+        if not available_cols:
+            print(f"Warning: No matching columns (Open, Close, Volume) found in {feature_file}. Skipping...")
             continue
         
-        # Select only the specified columns and rename them
-        feature_df_selected = feature_df[cols_to_select].copy()
+        feature_df_selected = feature_df[available_cols].copy()
         feature_df_selected.columns = [f"{prefix} - {col}" for col in feature_df_selected.columns]
         
         # Merge with main dataframe
@@ -210,5 +258,24 @@ def merge_csv_by_column(
     main_df.to_csv(output_path, index=False)
     print(f"Merged data saved to: {output_path}")
     print(f"Total rows: {len(main_df)}, Total columns: {len(main_df.columns)}")
-    
+
     return output_path
+
+def main():
+    # Merge multiple stocks by date
+    start = date(2020, 1, 1)
+    end = date(2025, 12, 3)
+    
+    main_file = fetch_and_save(yf.Ticker("AAPL"), start, end)
+    feature_file = fetch_and_save(yf.Ticker("MSFT"), start, end)
+    feature_file2 = fetch_and_save(yf.Ticker("GOOGL"), start, end)
+    
+    # Pass full paths - merge_csv_by_date handles both absolute paths and filenames
+    result = merge_csv_by_date(
+        main_file=main_file,  # Full path
+        feature_files=[feature_file, feature_file2],  # Full paths
+    )
+    print(f"Merged file: {result}")
+    return result
+
+main()
