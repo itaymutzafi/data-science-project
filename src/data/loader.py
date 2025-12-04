@@ -11,7 +11,11 @@ from typing import List, Union
 
 import pandas as pd
 import yfinance as yf
+import pandas as pd
+import yfinance as yf
 from yfinance import Ticker
+
+from src.config import AUX_DATA_PATH, AUX_TICKER_MAP
 
 
 def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
@@ -97,38 +101,70 @@ def fetch_and_save(ticker: Ticker, start_date: date, end_date: date, interval: s
     return file_path
 
 
-def fetch_auxiliary_data(start_date: str, end_date: str) -> pd.DataFrame:
+def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.DataFrame:
     """
     Fetches comprehensive market data for enrichment analysis.
     
     Categories:
     1. Macro-Economic: QQQ (Tech Index), ^VIX (Volatility), ^TNX (10Y Yield).
-    2. Segment/Supply-Chain: NVDA (AI Hardware Leader), AMD (Direct Competitor).
+    2. Segment/Supply-Chain: NVDA (AI Hardware Leader).
+    
+    Implements caching using AUX_DATA_PATH.
     
     Returns:
         pd.DataFrame: A unified DataFrame with renamed columns for clarity.
     """
-    # Define mapping of Ticker -> Descriptive Name
-    ticker_map = {
-        'QQQ': 'Nasdaq_100',
-        '^VIX': 'VIX_Index',
-        '^TNX': 'Treasury_10Y',
-        'NVDA': 'NVIDIA_Segment_Leader',
-        'AMD': 'AMD_Competitor'
-    }
-    
-    # Single batch download for efficiency
+    # 1. Check Cache
+    project_root = Path(__file__).resolve().parents[2]
+    # Handle relative path from config
+    if Path(AUX_DATA_PATH).is_absolute():
+        cache_path = Path(AUX_DATA_PATH)
+    else:
+        cache_path = project_root / AUX_DATA_PATH
+        
+    if cache_path.exists():
+        print(f"Loading auxiliary data from cache: {cache_path}")
+        try:
+            data = pd.read_parquet(cache_path)
+            # Ensure index is timezone-naive
+            if data.index.tz is not None:
+                data.index = data.index.tz_localize(None)
+            return data
+        except Exception as e:
+            print(f"Error loading cache: {e}. Fetching fresh data.")
+
+    # 2. Download from yfinance
+    print("Fetching auxiliary market data from yfinance...")
     try:
+        # Download data
         # Note: auto_adjust=True is default in newer yfinance, so 'Close' is adjusted.
-        data = yf.download(list(ticker_map.keys()), start=start_date, end=end_date)['Close']
+        # If start_date/end_date are None, yfinance defaults to max or similar, 
+        # but for auxiliary data we usually want a broad range or matching the main data.
+        # Here we'll default to a reasonable period if not specified, or let yfinance handle it.
+        # However, yf.download without start/end might be too much. 
+        # Let's use a default period if dates are missing, or just download everything.
+        
+        tickers = list(AUX_TICKER_MAP.keys())
+        if start_date and end_date:
+            data = yf.download(tickers, start=start_date, end=end_date)['Close']
+        else:
+            # Default to 5 years if not specified, to match sample data
+            data = yf.download(tickers, period="5y")['Close']
+            
         # Rename columns using the mapping
-        data = data.rename(columns=ticker_map)
-        # Handle missing values (forward fill is standard for financial time-series)
+        data = data.rename(columns=AUX_TICKER_MAP)
+        
+        # Handle missing values (forward fill)
         data = data.ffill()
         
-        # Ensure timezone-naive index for consistency with project standards
+        # Ensure timezone-naive index
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
+            
+        # 3. Save to Cache
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(cache_path)
+        print(f"Saved auxiliary data to {cache_path}")
             
         return data
     except Exception as e:

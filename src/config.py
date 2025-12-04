@@ -22,3 +22,12 @@ class DataConfig:
     END_DATE = None
 
     SEED = 42
+    
+    # --- Data Enrichment Config ---
+    AUX_TICKER_MAP = {
+        'QQQ': 'Nasdaq_100',
+        '^VIX': 'VIX_Index',
+        '^TNX': 'Treasury_10Y',
+        'NVDA': 'NVIDIA_Segment_Leader'
+    }
+    AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
