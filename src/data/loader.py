@@ -1,20 +1,17 @@
-"""Data access module (skeleton).
+"""Data access module.
 
-This module defines the I/O contract for the project. Implementations
-are intentionally omitted here: functions raise NotImplementedError so the
-team can implement them in a controlled, reviewed way.
+This module handles data fetching from external APIs (Yahoo Finance)
+and local file I/O operations (CSV, Parquet).
 """
 
+import os
+from datetime import date
 from pathlib import Path
-from typing import Optional
+from typing import List, Union
+
 import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
-from datetime import date
-import os
-from typing import Union, List
-
-
 
 
 def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
@@ -23,7 +20,8 @@ def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
     Implements local caching to avoid repeated API calls.
     """
     # Define cache path
-    cache_dir = Path("data/raw")
+    project_root = Path(__file__).resolve().parents[2]
+    cache_dir = project_root / "data" / "raw"
     cache_path = cache_dir / f"{ticker}.parquet"
     
     # Check cache
@@ -51,6 +49,7 @@ def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
     print(f"Saved {ticker} data to {cache_path}")
     
     return df
+
 
 def fetch_and_save(ticker: Ticker, start_date: date, end_date: date, interval: str = "1d", folder: str = "raw") -> str:
     """
@@ -96,6 +95,46 @@ def fetch_and_save(ticker: Ticker, start_date: date, end_date: date, interval: s
     print(f"Fetched {len(data)} rows of data")
         
     return file_path
+
+
+def fetch_auxiliary_data(start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    Fetches comprehensive market data for enrichment analysis.
+    
+    Categories:
+    1. Macro-Economic: QQQ (Tech Index), ^VIX (Volatility), ^TNX (10Y Yield).
+    2. Segment/Supply-Chain: NVDA (AI Hardware Leader), AMD (Direct Competitor).
+    
+    Returns:
+        pd.DataFrame: A unified DataFrame with renamed columns for clarity.
+    """
+    # Define mapping of Ticker -> Descriptive Name
+    ticker_map = {
+        'QQQ': 'Nasdaq_100',
+        '^VIX': 'VIX_Index',
+        '^TNX': 'Treasury_10Y',
+        'NVDA': 'NVIDIA_Segment_Leader',
+        'AMD': 'AMD_Competitor'
+    }
+    
+    # Single batch download for efficiency
+    try:
+        # Note: auto_adjust=True is default in newer yfinance, so 'Close' is adjusted.
+        data = yf.download(list(ticker_map.keys()), start=start_date, end=end_date)['Close']
+        # Rename columns using the mapping
+        data = data.rename(columns=ticker_map)
+        # Handle missing values (forward fill is standard for financial time-series)
+        data = data.ffill()
+        
+        # Ensure timezone-naive index for consistency with project standards
+        if data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
+            
+        return data
+    except Exception as e:
+        print(f"Error fetching auxiliary data: {e}")
+        return pd.DataFrame()
+
 
 def merge_csv_by_date(
     main_file: str,
@@ -202,13 +241,13 @@ def merge_csv_by_date(
     if output_folder is None:
         output_folder_path = data_folder
     else:
-        output_folder_path = os.path.join(project_root, "data", output_folder)
-        os.makedirs(output_folder_path, exist_ok=True)
+        output_folder_path = project_root / "data" / output_folder
+        output_folder_path.mkdir(parents=True, exist_ok=True)
     
     if output_file is None:
         output_file = main_file
     
-    output_path = os.path.join(output_folder_path, output_file)
+    output_path = output_folder_path / output_file
     
     # Save merged CSV
     main_df.to_csv(output_path, index=False)
@@ -216,24 +255,3 @@ def merge_csv_by_date(
     print(f"Total rows: {len(main_df)}, Total columns: {len(main_df.columns)}")
 
     return output_path
-
-def load_csv(filepath: str) -> pd.DataFrame:
-    """
-    Loads data from a CSV file.
-    """
-    raise NotImplementedError("load_csv not implemented yet.")
-
-def main():
-    start = date(2020, 1, 1)
-    end = date(2025, 12, 3)
-    
-    main_file = fetch_and_save(yf.Ticker("AAPL"), start, end)
-    feature_file = fetch_and_save(yf.Ticker("MSFT"), start, end)
-    feature_file2 = fetch_and_save(yf.Ticker("GOOGL"), start, end)
-    
-    # Pass full paths - merge_csv_by_date handles both absolute paths and filenames
-    result = merge_csv_by_date(
-        main_file=main_file,  # Full path
-        feature_files=[feature_file, feature_file2],  # Full paths
-    )
-main()

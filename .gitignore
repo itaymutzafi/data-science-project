@@ -17,9 +17,11 @@ env/
 *-checkpoint.ipynb
 
 # Data
-data/raw/*
-data/processed/*
+data/*
+!data/.gitkeep
+!data/raw/
 !data/raw/.gitkeep
+!data/processed/
 !data/processed/.gitkeep
 
 # Testing
