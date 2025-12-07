@@ -8,6 +8,8 @@
       "Low":           { "type": "float" },
       "Close":         { "type": "float" },
       "Volume":        { "type": "int", "minimum": 0 },
+      "Return":        { "type": "float"},
+      "Log_Return":    { "type": "float"},
   
       "Dividends":     { "type": ["float", "null"] },
       "Stock Splits":  { "type": ["float", "null"] }
