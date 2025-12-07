@@ -127,121 +127,62 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
         return pd.DataFrame()
 
 
-def merge_csv_by_date(
-    main_file: str,
-    feature_files: Union[str, List[str]],
-    folder: str = "raw",
-    output_file: str = None,
-    output_folder: str = None,
-    how: str = "left") -> str:
-    """
-    Merge multiple stock CSV files by Date, including only Open, Close, and Volume columns.
+def merge_df_by_date(
+    main_df: pd.DataFrame,
+    feature_dfs: Union[pd.DataFrame, List[pd.DataFrame]],
+    feature_names: Union[str, List[str]] = None,
+    output_filename : str = "merged_df.parquet",
+    how: str = "left") -> pd.DataFrame:
     
-    Parameters
-    ----------
-    main_file : str
-        Filename of the main CSV file (e.g., 'AAPL_20230101_20231231.csv').
-    feature_files : str or list of str
-        Filename(s) of stock CSV files to merge (e.g., 'MSFT_20230101_20231231.csv' or ['MSFT_...', 'GOOGL_...']).
-    folder : str, optional
-        Subfolder under 'data' where CSV files are located (default: 'raw').
-    output_file : str, optional
-        Output filename. If None, overwrites main_file.
-    output_folder : str, optional
-        Output folder. If None, uses the same folder as input files.
-    how : str, optional
-        Type of merge (default: 'left'). Options: 'left', 'right', 'outer', 'inner'.
+    # Normalize inputs: convert single DataFrame to list for uniform processing
+    feature_dfs_list = [feature_dfs] if isinstance(feature_dfs, pd.DataFrame) else feature_dfs
+
+    if isinstance(feature_names, str):
+        feature_names_list = [feature_names]
+    else: 
+        feature_names_list = feature_names
+
+    # Ensure index is DatetimeIndex
+    if not isinstance(main_df.index, pd.DatetimeIndex):
+        main_df.index = pd.to_datetime(main_df.index)
     
-    Returns
-    -------
-    str
-        Path to the merged CSV file.
-    
-    Note
-    ----
-    Only Open, Close, and Volume columns are merged from feature files.
-    Main file keeps all its columns.
-    
-    Example
-    -------
-    >>> merge_csv_by_date('AAPL_20230101_20231231.csv', 'MSFT_20230101_20231231.csv')
-    """
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_folder = os.path.join(project_root, "data", folder)
-    
-    # Normalize inputs: convert single values to lists for uniform processing
-    feature_files_list = [feature_files] if isinstance(feature_files, str) else feature_files
-    
-    # Auto-generate prefixes from filenames (extract ticker symbol before first '_')
-    # Extract just the filename if full paths are provided, then get ticker symbol
-    feature_prefixes_list = [os.path.splitext(os.path.basename(f))[0].split('_')[0] for f in feature_files_list]
-    
-    # Load main CSV file
-    # Check if it's a full path or just a filename
-    if os.path.isabs(main_file):
-        main_path = main_file  # Already a full path
-    else:
-        main_path = os.path.join(data_folder, main_file)  # Just filename, join with folder
-    
-    if not os.path.exists(main_path):
-        raise FileNotFoundError(f"Main file not found: {main_path}")
-    
-    print(f"Loading main file: {main_file}")
-    main_df = pd.read_csv(main_path)
-    main_df.set_index("Date", inplace=True)
-    
+    columns_to_merge = ['Close', 'Volume']
+
+    print(f"Start Merging")
+
+    res_df = main_df.copy()
+   
     # Merge each feature file
-    for i, feature_file in enumerate(feature_files_list):
-        # Check if it's a full path or just a filename
-        if os.path.isabs(feature_file):
-            feature_path = feature_file  # Already a full path
-        else:
-            feature_path = os.path.join(data_folder, feature_file)  # Just filename, join with folder
-        
-        if not os.path.exists(feature_path):
-            print(f"Warning: Feature file not found: {feature_path}. Skipping...")
-            continue
-        
-        print(f"Loading feature file: {feature_file}")
-        feature_df = pd.read_csv(feature_path)
-        feature_df.set_index("Date", inplace=True)
-        
-        # Get prefix for this file
-        prefix = feature_prefixes_list[i]
+    for i, feature_df in enumerate(feature_dfs_list):
+        feature_name = feature_names_list[i]
+
+        # Ensure feature index is DatetimeIndex
+        if not isinstance(feature_df.index, pd.DatetimeIndex):
+            feature_df.index = pd.to_datetime(feature_df.index)
         
         # Select only Open, Close, and Volume columns
-        columns_to_merge = ['Open', 'Close', 'Volume']
         available_cols = [col for col in columns_to_merge if col in feature_df.columns]
         
         if not available_cols:
-            print(f"Warning: No matching columns (Open, Close, Volume) found in {feature_file}. Skipping...")
+            print(f"Warning: No matching columns {columns_to_merge} found in {feature_name}. Skipping...")
             continue
         
         feature_df_selected = feature_df[available_cols].copy()
-        feature_df_selected.columns = [f"{prefix} - {col}" for col in feature_df_selected.columns]
+        feature_df_selected.columns = [f"{feature_name} - {col}" for col in feature_df_selected.columns]
         
         # Merge with main dataframe
-        main_df = main_df.join(feature_df_selected, how=how)
-        print(f"Merged {feature_file} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
+        res_df = res_df.join(feature_df_selected, how=how)
+        print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
+       
+    print(f"Final merged DataFrame shape: {res_df.shape}")
+    project_root = Path(__file__).resolve().parents[2]
+    cache_dir = project_root / "data" / "raw"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / output_filename
     
-    # Reset index to make Date a column again
-    main_df.reset_index(inplace=True)
-    
-    # Determine output path
-    if output_folder is None:
-        output_folder_path = data_folder
-    else:
-        output_folder_path = project_root / "data" / output_folder
-        output_folder_path.mkdir(parents=True, exist_ok=True)
-    
-    if output_file is None:
-        output_file = main_file
-    
-    output_path = output_folder_path / output_file
-    
-    # Save merged CSV
-    main_df.to_csv(output_path, index=False)
-    print(f"Merged data saved to: {output_path}")
-    print(f"Total rows: {len(main_df)}, Total columns: {len(main_df.columns)}")
+    res_df.to_parquet(cache_path)
+    print(f"Merged data saved to: {cache_path}")
 
-    return output_path
+    return res_df
+    
+    
