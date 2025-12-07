@@ -15,22 +15,24 @@ import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
 
-from src.config import AUX_DATA_PATH, AUX_TICKER_MAP
+from src.config import DataConfig
+AUX_DATA_PATH, AUX_TICKER_MAP = DataConfig.AUX_DATA_PATH, DataConfig.AUX_TICKER_MAP
 
 
-def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
+def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y") -> pd.DataFrame:
     """
     Fetches raw OHLCV data for initial research and stationarity tests.
     Implements local caching to avoid repeated API calls.
     """
     # Define cache path
+    ticker_name = ticker.ticker
     project_root = Path(__file__).resolve().parents[2]
     cache_dir = project_root / "data" / "raw"
-    cache_path = cache_dir / f"{ticker}.parquet"
+    cache_path = cache_dir / f"{ticker_name}.parquet"
     
     # Check cache
     if cache_path.exists():
-        print(f"Loading {ticker} data from cache...")
+        print(f"Loading {ticker_name} data from cache... - don't generate a new df!!!")
         df = pd.read_parquet(cache_path)
         # Ensure index is timezone-naive for consistency
         if df.index.tz is not None:
@@ -38,11 +40,11 @@ def fetch_sample_data(ticker: str, period: str = "5y") -> pd.DataFrame:
         return df
         
     # Download if not in cache
-    print(f"Fetching {period} of data for {ticker} from yfinance...")
-    df = yf.Ticker(ticker).history(period=period)
+    print(f"Fetching {period} of data for {ticker_name} from yfinance...")
+    df = ticker.history(start = start_time, end = end_time)
     
     if df.empty:
-        raise ValueError(f"No data found for ticker {ticker}")
+        raise ValueError(f"No data found for ticker {ticker_name}")
         
     # Remove timezone for simplicity in plots and saving
     df.index = df.index.tz_localize(None)
@@ -178,8 +180,7 @@ def merge_csv_by_date(
     folder: str = "raw",
     output_file: str = None,
     output_folder: str = None,
-    how: str = "left"
-) -> str:
+    how: str = "left") -> str:
     """
     Merge multiple stock CSV files by Date, including only Open, Close, and Volume columns.
     
