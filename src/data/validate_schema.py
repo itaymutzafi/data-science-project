@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
-
-from pandas._libs import properties
+import pandas as pd
 
 def load_schema():
     schema_path = Path(__file__).parent / "schema.json"
@@ -13,7 +12,24 @@ def validate_schema(df):
     errors = []
     properties = schema.get("properties", {})
 
+    if "Date" not in df.columns:
+        try:
+            idx = pd.to_datetime(df.index, errors="raise")
+        except Exception:
+            errors.append(f"Index could not be parsed as datetime")
+        else:
+            # check for NaT
+            if idx.isnull().any():
+                errors.append(f"Index contains missing datetime values (NaT).")
+            # check uniqueness
+            if not idx.is_unique:
+                errors.append(f"Index contains duplicate datetime values.")
+            if not idx.is_monotonic_increasing:
+                errors.append(f"Index is not sorted (not monotonic increasing).")
+
     for col, col_def in properties.items():
+        if col == "Date":
+            continue
         if col not in df.columns:
             errors.append(f"Missing column: {col}")
         else:

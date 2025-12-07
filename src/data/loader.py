@@ -15,8 +15,7 @@ import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
 
-from src.config import DataConfig
-AUX_DATA_PATH, AUX_TICKER_MAP = DataConfig.AUX_DATA_PATH, DataConfig.AUX_TICKER_MAP
+from src.config import AUX_DATA_PATH, AUX_TICKER_MAP
 
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y") -> pd.DataFrame:
@@ -55,52 +54,6 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     print(f"Saved {ticker} data to {cache_path}")
     
     return df
-
-
-def fetch_and_save(ticker: Ticker, start_date: date, end_date: date, interval: str = "1d", folder: str = "raw") -> str:
-    """
-    Fetch historical stock data from Yahoo Finance and save it to CSV file(s).
-
-    Can handle either a single ticker or multiple tickers. For multiple tickers,
-    each ticker is saved to a separate CSV file.
-
-    Parameters
-    ----------
-    ticker : Ticker
-        Stock ticker symbol(s) (e.g., 'AAPL', ['AAPL', 'MSFT', 'GOOGL']).
-    start_date : date,
-        Start date for historical data.
-    end_date : date,
-        End date for historical data.
-    interval : str, optional
-        Data interval (default: '1d'). Valid intervals: '1m', '2m', '5m', '15m', 
-        '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo'.
-    folder : str, optional
-        Subfolder under 'data' to save the file(s) (default: 'raw').
-
-    Returns
-    -------
-    str
-        Path(s) to the saved CSV file(s).
-    """
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_folder = os.path.join(project_root, "data", folder)
-    
-    # Create the folder if it doesn't exist
-    os.makedirs(data_folder, exist_ok=True)  
-    
-    data = ticker.history(start=start_date, end=end_date, interval=interval)
-        
-    filename = f"{ticker.ticker}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
-    file_path = os.path.join(data_folder, filename)
-        
-    # Save to CSV
-    data.to_csv(file_path)
-        
-    print(f"Data for {ticker.ticker} saved to {file_path}")
-    print(f"Fetched {len(data)} rows of data")
-        
-    return file_path
 
 
 def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.DataFrame:
