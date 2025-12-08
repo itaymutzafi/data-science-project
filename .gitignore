@@ -18,11 +18,6 @@ env/
 
 # Data
 data/*
-!data/.gitkeep
-!data/raw/
-!data/raw/.gitkeep
-!data/processed/
-!data/processed/.gitkeep
 
 # Testing
 .pytest_cache/

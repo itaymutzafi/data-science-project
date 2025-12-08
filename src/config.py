@@ -29,3 +29,7 @@ AUX_TICKER_MAP = {
     'NVDA': 'NVIDIA_Segment_Leader'
 }
 AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
+
+# Sentiment Data
+RAW_NEWS_PATH = "data/raw/apple_news_last_15y.csv"
+PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
