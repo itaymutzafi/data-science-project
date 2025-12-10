@@ -3,18 +3,13 @@
 This module handles data fetching from external APIs (Yahoo Finance)
 and local file I/O operations (CSV, Parquet).
 """
-
-import os
 from datetime import date
 from pathlib import Path
 from typing import List, Union
-
-import pandas as pd
-import yfinance as yf
 import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
-
+import numpy as np
 from src.config import AUX_DATA_PATH, AUX_TICKER_MAP
 
 
@@ -185,4 +180,9 @@ def merge_df_by_date(
 
     return res_df
     
-    
+def fetch_data_for_eda(ticker: str, start_time: date, end_time: date):
+    Ticker = yf.Ticker(ticker)
+    df = fetch_sample_data(Ticker, start_time, end_time)
+    df['Return'] = df['Close'].pct_change()
+    df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
+    return df
