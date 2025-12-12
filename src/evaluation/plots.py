@@ -211,3 +211,24 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
     plt.title(f"AAPL Stock Price vs. FinBERT Sentiment {title_suffix}")
     fig.tight_layout()
     plt.show()
+
+def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame):
+    """
+    Plots the daily sentiment scores for each company found in the DataFrame.
+    
+    Args:
+        daily_sentiment_df (pd.DataFrame): DataFrame containing 'date', 'company', and 'sentiment_mean'.
+    """
+    companies = daily_sentiment_df['company'].unique()
+    
+    for company in companies:
+        subset = daily_sentiment_df[daily_sentiment_df['company'] == company]
+        
+        plt.figure(figsize=(12, 4))
+        plt.plot(subset['date'], subset['sentiment_mean'], label='Daily Sentiment', alpha=0.6)
+        plt.title(f"{company}: Daily Sentiment Score")
+        plt.xlabel("Date")
+        plt.ylabel("Sentiment Score")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()

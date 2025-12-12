@@ -15,7 +15,7 @@ import os
 
 
 # Access Token since the dataset is protected
-login(os.getenv("HF_TOKEN"))
+# login(os.getenv("HF_TOKEN"))
 
 YEARS_BACK = 5
 OUTPUT_CSV = f"news_last_{YEARS_BACK}y.csv"
@@ -209,5 +209,10 @@ def get_google_news_titles(query, days):
             "link": entry.link,
             "source": entry.source.title if "source" in entry else "unknown"
         })
+
+    if not rows:
+        df = pd.DataFrame(columns=["published", "date", "title", "link", "source"])
+        df["date"] = pd.to_datetime(df["date"])
+        return df
 
     return pd.DataFrame(rows)

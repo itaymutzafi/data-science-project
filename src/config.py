@@ -8,6 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
+PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
 # Data Settings
 TICKER = "AAPL"
@@ -31,5 +32,5 @@ AUX_TICKER_MAP = {
 AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
 
 # Sentiment Data
-RAW_NEWS_PATH = "data/raw/apple_news_last_15y.csv"
+RAW_NEWS_PATH = "data/raw/news_last_5y.csv"
 PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"

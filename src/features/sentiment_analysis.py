@@ -197,3 +197,122 @@ def integrate_sentiment_data(
     merged_df['sentiment_mean_lag1'] = merged_df['sentiment_mean_lag1'].fillna(0)
     
     return merged_df
+
+def generate_daily_sentiment_features(
+    news_path: str,
+    output_path: str = None,
+    n_sample_per_day: int = 5,
+    sampling_frac: float = None,
+    cutoff_date: str = None,
+    company_filter: str = None
+) -> pd.DataFrame:
+    """
+    Efficiently processes news data to generate daily sentiment features using sampling.
+    
+    1. Loads news data (CSV).
+    2. Filters by date/company.
+    3. Groups by Date + Company and samples N headlines.
+    4. Runs FinBERT.
+    5. Aggregates to daily level.
+    6. Saves to cache (optional).
+    
+    Args:
+        news_path: Path to the raw news CSV.
+        output_path: Path to save the aggregated sentiment CSV (cache).
+        n_sample_per_day: Number of news items to sample per company-day.
+        sampling_frac: Fraction of total headlines to sample (0.0 to 1.0). Applied before n_sample_per_day.
+        cutoff_date: Optional filter for start date.
+        company_filter: Optional filter for specific company.
+        
+    Returns:
+        pd.DataFrame: Daily sentiment features (date, company, sentiment_mean, news_count).
+    """
+    logger.info(f"Loading news data from {news_path}...")
+    # Load only necessary columns to save memory
+    try:
+        df = pd.read_csv(news_path, usecols=['date', 'company', 'text'], dtype=str)
+    except Exception as e:
+        logger.error(f"Failed to load news data: {e}")
+        return pd.DataFrame()
+
+    # Preprocessing
+    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+    df = df.dropna(subset=['date', 'text'])
+    
+    # Filter by date
+    if cutoff_date:
+        df = df[df['date'] >= pd.to_datetime(cutoff_date)]
+        
+    # Filter by company
+    if company_filter:
+        df = df[df['company'] == company_filter]
+        
+    # Preprocessing: Extract headline from text (first sentence/line)
+    # This ensures we handle article bodies by taking the title/first sentence
+    logger.info("Extracting headlines (first sentence of article)...")
+    df['text'] = df['text'].astype(str).str.split('\n').str[0].str.strip()
+    # Drop empty texts
+    df = df[df['text'].str.len() > 3] 
+
+    logger.info(f"Total headlines before sampling: {len(df)}")
+    
+    if len(df) == 0:
+        logger.warning(f"No headlines found after filtering! Check news_path or cutoff_date. News Path: {news_path}")
+        return pd.DataFrame(columns=['date', 'company', 'sentiment_mean', 'news_count', 'sentiment_std'])
+
+    # Sampling Strategy
+    # Case A: Hybrid Sampling (Percentage but ensure coverage)
+    if n_sample_per_day == 0 and sampling_frac and 0 < sampling_frac < 1.0:
+         logger.info(f"Applying Hybrid Sampling: Ensure at least 1 per day + ~{sampling_frac*100}% of valid news...")
+         
+         # Shuffle first to be random
+         df = df.sample(frac=1, random_state=42)
+         
+         # 1. Mandatory Coverage: Take first item from every (date, company) group
+         # This fixes the issue where random sampling misses entire days/companies
+         mandatory = df.groupby(['date', 'company']).head(1)
+         
+         # 2. Variable Sampling: Sample 'frac' from the REST
+         remainder = df.drop(mandatory.index)
+         if len(remainder) > 0:
+             # We sample 'frac' percent of the *remainder* to add to the mandatory set
+             # Or 'frac' of total? User said "randomly sample percent". 
+             # Let's simple sample 'frac' from remainder.
+             sampled_remainder = remainder.sample(frac=sampling_frac, random_state=42)
+             df = pd.concat([mandatory, sampled_remainder])
+         else:
+             df = mandatory
+             
+         logger.info(f"Headlines after hybrid sampling: {len(df)}")
+
+    # Case B: Fixed Cap (Original Logic)
+    elif n_sample_per_day > 0:
+        logger.info(f"Sampling up to {n_sample_per_day} headlines per company per day...")
+        # Shuffle deterministically
+        df = df.sample(frac=1, random_state=42)
+        # Take top N per group
+        df = df.groupby(['date', 'company']).head(n_sample_per_day)
+        
+        logger.info(f"Total headlines after sampling: {len(df)}")
+    
+    # Case C: Percentage Only (without coverage guarantee - deprecated by Hybrid, but logic remains if needed)
+    elif sampling_frac and 0 < sampling_frac < 1.0:
+        df = df.sample(frac=sampling_frac, random_state=42)
+        
+    # Run analysis
+    analyzer = SentimentAnalyzer()
+    scored_df = analyzer.analyze_headlines(df, text_col='text')
+    
+    # Aggregate
+    # We want features per company per day
+    agg_features = scored_df.groupby(['date', 'company']).agg(
+        sentiment_mean=('sentiment_score', 'mean'),
+        news_count=('sentiment_score', 'count'),
+        sentiment_std=('sentiment_score', 'std') # Extra feature
+    ).reset_index()
+    
+    if output_path:
+        logger.info(f"Saving aggregated sentiment features to {output_path}...")
+        agg_features.to_csv(output_path, index=False)
+        
+    return agg_features
