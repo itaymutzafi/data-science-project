@@ -181,6 +181,12 @@ def integrate_sentiment_data(
     if not isinstance(stock_df.index, pd.DatetimeIndex):
         stock_df.index = pd.to_datetime(stock_df.index)
         
+    # Check for overlapping columns and drop them from stock_df to allow clean merge (idempotency)
+    overlap_cols = stock_df.columns.intersection(daily_sentiment_lagged.columns)
+    if not overlap_cols.empty:
+        logger.info(f"Dropping existing sentiment columns from stock data to avoid duplicates: {overlap_cols.tolist()}")
+        stock_df = stock_df.drop(columns=overlap_cols)
+
     # Left join to keep all stock rows
     merged_df = stock_df.join(daily_sentiment_lagged, how='left')
     

@@ -171,14 +171,14 @@ def plot_context_comparison(target_series: pd.Series, aux_data: pd.DataFrame, ta
     plt.tight_layout()
     plt.show()
 
-def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_mean_lag1', days: int = 200):
+def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_mean_lag1', days: int = None):
     """
     Visualizes stock price vs sentiment score for the last N days.
     
     Args:
         df (pd.DataFrame): DataFrame containing stock price ('Close') and sentiment.
         sentiment_col (str): Column name for sentiment score.
-        days (int): Number of last days to plot.
+        days (int): Number of last days to plot. If None, plots all available data.
     """
     if sentiment_col not in df.columns:
         print(f"Column '{sentiment_col}' not found. Skipping plot.")
@@ -190,8 +190,13 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
     ax1.set_xlabel('Date')
     ax1.set_ylabel('Stock Price', color=color)
     
-    # Slice last N days
-    plot_data = df.iloc[-days:]
+    # Slice last N days if specified
+    if days:
+        plot_data = df.iloc[-days:]
+        title_suffix = f"(Last {days} Days)"
+    else:
+        plot_data = df
+        title_suffix = "(Full Period)"
     
     ax1.plot(plot_data.index, plot_data['Close'], color=color, label='Close Price')
     ax1.tick_params(axis='y', labelcolor=color)
@@ -203,6 +208,6 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
     ax2.plot(plot_data.index, plot_data[sentiment_col], color=color, linestyle='--', label='Sentiment (Lag 1)', alpha=0.6)
     ax2.tick_params(axis='y', labelcolor=color)
 
-    plt.title(f"AAPL Stock Price vs. FinBERT Sentiment (Last {days} Days)")
+    plt.title(f"AAPL Stock Price vs. FinBERT Sentiment {title_suffix}")
     fig.tight_layout()
     plt.show()
