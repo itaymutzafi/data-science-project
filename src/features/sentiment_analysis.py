@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 from transformers import pipeline
 from tqdm import tqdm
+from src.data.news_loader import get_google_news_titles
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -260,18 +261,22 @@ def generate_daily_sentiment_features(
     output_path: str = None,
     n_sample_per_day: int = 5,
     cutoff_date: str = None,
-    company_filter: str = None
+    company_filter: str = None,
+    use_google_news: bool = False
 ) -> pd.DataFrame:
     """
     Efficiently processes news data to generate daily sentiment features using stratified sampling.
+    Optionally fetches recent Google News to fill data gaps (e.g., 2024-2025).
     
     1. Loads news data.
-    2. Implements intelligent text extraction:
+    2. Fetches Google News (if enabled).
+    3. Merges datasets.
+    4. Implements intelligent text extraction:
        - Uses 'headline' or 'title' if available.
        - Fallback: Extracts first sentence from 'text' or 'body'.
-    3. Stratified Sampling: Ensures coverage for every (date, company) group by taking up to N random samples.
-    4. Runs FinBERT sentiment analysis.
-    5. Aggregates to daily level.
+    5. Stratified Sampling: Ensures coverage for every (date, company) group by taking up to N random samples.
+    6. Runs FinBERT sentiment analysis.
+    7. Aggregates to daily level.
     
     Args:
         news_path: Path to the raw news CSV.
@@ -279,6 +284,7 @@ def generate_daily_sentiment_features(
         n_sample_per_day: Number of news items to sample per company-day.
         cutoff_date: Optional filter for start date.
         company_filter: Optional filter for specific company.
+        use_google_news: Whether to fetch recent news from Google News RSS.
         
     Returns:
         pd.DataFrame: Daily sentiment features (date, company, sentiment_mean, news_count).
@@ -292,6 +298,43 @@ def generate_daily_sentiment_features(
     except Exception as e:
         logger.error(f"Failed to load news data: {e}")
         return pd.DataFrame()
+
+    # Google News Fetching
+    if use_google_news:
+        logger.info("Fetching recent Google News data to fill gaps...")
+        google_news_frames = []
+        target_companies = ["Apple", "Microsoft", "Amazon", "Google"]
+        
+        # If filtering for specific company, only fetch for that one
+        if company_filter:
+            target_companies = [c for c in target_companies if c.lower() == company_filter.lower()] or [company_filter]
+
+        for company in target_companies:
+            try:
+                logger.info(f"Fetching Google News for {company}...")
+                # Fetch last 2 years (approx 730 days) to cover 2024-2025 gap
+                gn_df = get_google_news_titles(f"{company} stock", days=730)
+                if not gn_df.empty:
+                    # Normalize columns to match main df
+                    # Google News returns: ['published', 'date', 'title', 'link', 'source']
+                    # Main df expects: ['date', 'company', 'text'/'headline']
+                    gn_df['company'] = company
+                    gn_df['headline'] = gn_df['title'] # Use title as headline
+                    # Select relevant columns
+                    gn_df = gn_df[['date', 'company', 'headline']]
+                    google_news_frames.append(gn_df)
+            except Exception as e:
+                logger.warning(f"Failed to fetch Google News for {company}: {e}")
+        
+        if google_news_frames:
+            combined_gn = pd.concat(google_news_frames, ignore_index=True)
+            # Ensure main df has compatible columns before concat
+            # The main df might filter cols earlier, but we read 'dtype=str' so it has all.
+            # We strictly need date, company, text/headline.
+            logger.info(f"Merging {len(combined_gn)} Google News articles...")
+            df = pd.concat([df, combined_gn], ignore_index=True)
+        else:
+            logger.warning("No Google News data fetched.")
 
     # Preprocessing Dates
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
