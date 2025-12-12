@@ -212,23 +212,57 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
     fig.tight_layout()
     plt.show()
 
-def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame):
+def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame, rolling_window: int = 1):
     """
-    Plots the daily sentiment scores for each company found in the DataFrame.
+    Plots the daily sentiment scores and moving averages for all companies.
     
     Args:
-        daily_sentiment_df (pd.DataFrame): DataFrame containing 'date', 'company', and 'sentiment_mean'.
+        daily_sentiment_df (pd.DataFrame): DataFrame with 'date', 'company', 'sentiment_mean'.
+        rolling_window (int): Window size for moving average (default 1 day = Daily data).
     """
-    companies = daily_sentiment_df['company'].unique()
+    if daily_sentiment_df.empty:
+        print("No data to plot.")
+        return
+
+    # Ensure date is datetime
+    df = daily_sentiment_df.copy()
+    df['date'] = pd.to_datetime(df['date'])
     
-    for company in companies:
-        subset = daily_sentiment_df[daily_sentiment_df['company'] == company]
+    companies = df['company'].unique()
+    
+    plt.figure(figsize=(14, 6))
+    
+    # Define a color palette
+    palette = sns.color_palette("husl", len(companies))
+    
+    for i, company in enumerate(companies):
+        subset = df[df['company'] == company].sort_values('date')
         
-        plt.figure(figsize=(12, 4))
-        plt.plot(subset['date'], subset['sentiment_mean'], label='Daily Sentiment', alpha=0.6)
-        plt.title(f"{company}: Daily Sentiment Score")
-        plt.xlabel("Date")
-        plt.ylabel("Sentiment Score")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.show()
+        # Calculate Moving Average
+        if rolling_window > 1:
+            subset['ma'] = subset['sentiment_mean'].rolling(window=rolling_window, min_periods=1).mean()
+            label_text = f"{company} ({rolling_window}-Day MA)"
+            plot_col = 'ma'
+        else:
+            subset['ma'] = subset['sentiment_mean']
+            label_text = f"{company} (Daily)"
+            plot_col = 'sentiment_mean'
+        
+        color = palette[i]
+        
+        # Plot Raw (faint) if smoothing is applied
+        if rolling_window > 1:
+            plt.scatter(subset['date'], subset['sentiment_mean'], color=color, alpha=0.1, s=10, label='_nolegend_')
+        
+        # Plot Main Line (bold)
+        plt.plot(subset['date'], subset[plot_col], color=color, linewidth=2, label=label_text)
+
+    title_text = f"Sentiment Trends: {rolling_window}-Day Moving Average" if rolling_window > 1 else "Daily Sentiment Trends"
+    plt.title(title_text, fontsize=16)
+    plt.xlabel("Date")
+    plt.ylabel("Sentiment Score (-1 to 1)")
+    plt.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.5)
+    plt.legend(loc='upper left')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()

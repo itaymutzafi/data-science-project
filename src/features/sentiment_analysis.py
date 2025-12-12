@@ -12,6 +12,63 @@ from tqdm import tqdm
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def fill_missing_sentiment_dates(
+    df: pd.DataFrame, 
+    date_col: str = 'date',
+    company_col: str = 'company',
+    fill_value: float = 0.0
+) -> pd.DataFrame:
+    """
+    Reindexes the DataFrame to ensure every day in the range is present for each company.
+    Missing days are filled with neutral sentiment (0.0) and 0 news count.
+    
+    Args:
+        df: Input sentiment DataFrame.
+        date_col: Name of date column.
+        company_col: Name of company column.
+        fill_value: Value to fill missing sentiment scores (default 0.0).
+        
+    Returns:
+        pd.DataFrame: Reindexed DataFrame with continuous daily range per company.
+    """
+    if df.empty:
+        return df
+
+    # Ensure dates
+    df[date_col] = pd.to_datetime(df[date_col])
+    
+    # Get overall min/max dates
+    min_date = df[date_col].min()
+    max_date = df[date_col].max()
+    all_dates = pd.date_range(start=min_date, end=max_date, freq='D')
+    
+    companies = df[company_col].unique()
+    
+    reindexed_dfs = []
+    
+    for company in companies:
+        # Filter for company
+        comp_df = df[df[company_col] == company].set_index(date_col)
+        
+        # Reindex
+        comp_df = comp_df.reindex(all_dates)
+        
+        # Fill Metadata
+        comp_df[company_col] = company
+        
+        # Fill Metrics
+        comp_df['sentiment_mean'] = comp_df['sentiment_mean'].fillna(fill_value)
+        comp_df['news_count'] = comp_df['news_count'].fillna(0)
+        
+        # Determine std behavior (NaN std for inserted days? or 0? keeping NaN is likely safer for stats)
+        # comp_df['sentiment_std'] = comp_df['sentiment_std'] # NaN preserved
+        
+        # Reset index to make date a column
+        comp_df.index.name = date_col
+        reindexed_dfs.append(comp_df.reset_index())
+        
+    return pd.concat(reindexed_dfs, ignore_index=True)
+
 class SentimentAnalyzer:
     """
     Analyzes financial news headlines using the FinBERT model.
@@ -202,25 +259,24 @@ def generate_daily_sentiment_features(
     news_path: str,
     output_path: str = None,
     n_sample_per_day: int = 5,
-    sampling_frac: float = None,
     cutoff_date: str = None,
     company_filter: str = None
 ) -> pd.DataFrame:
     """
-    Efficiently processes news data to generate daily sentiment features using sampling.
+    Efficiently processes news data to generate daily sentiment features using stratified sampling.
     
-    1. Loads news data (CSV).
-    2. Filters by date/company.
-    3. Groups by Date + Company and samples N headlines.
-    4. Runs FinBERT.
+    1. Loads news data.
+    2. Implements intelligent text extraction:
+       - Uses 'headline' or 'title' if available.
+       - Fallback: Extracts first sentence from 'text' or 'body'.
+    3. Stratified Sampling: Ensures coverage for every (date, company) group by taking up to N random samples.
+    4. Runs FinBERT sentiment analysis.
     5. Aggregates to daily level.
-    6. Saves to cache (optional).
     
     Args:
         news_path: Path to the raw news CSV.
         output_path: Path to save the aggregated sentiment CSV (cache).
         n_sample_per_day: Number of news items to sample per company-day.
-        sampling_frac: Fraction of total headlines to sample (0.0 to 1.0). Applied before n_sample_per_day.
         cutoff_date: Optional filter for start date.
         company_filter: Optional filter for specific company.
         
@@ -228,16 +284,18 @@ def generate_daily_sentiment_features(
         pd.DataFrame: Daily sentiment features (date, company, sentiment_mean, news_count).
     """
     logger.info(f"Loading news data from {news_path}...")
-    # Load only necessary columns to save memory
+    
     try:
-        df = pd.read_csv(news_path, usecols=['date', 'company', 'text'], dtype=str)
+        # Load all columns first to check for headline/title presence
+        # Optimization: use iterator or just load, assuming memory is sufficient for 5y news (usually is)
+        df = pd.read_csv(news_path, dtype=str)
     except Exception as e:
         logger.error(f"Failed to load news data: {e}")
         return pd.DataFrame()
 
-    # Preprocessing
+    # Preprocessing Dates
     df['date'] = pd.to_datetime(df['date'], errors='coerce')
-    df = df.dropna(subset=['date', 'text'])
+    df = df.dropna(subset=['date'])
     
     # Filter by date
     if cutoff_date:
@@ -247,72 +305,97 @@ def generate_daily_sentiment_features(
     if company_filter:
         df = df[df['company'] == company_filter]
         
-    # Preprocessing: Extract headline from text (first sentence/line)
-    # This ensures we handle article bodies by taking the title/first sentence
-    logger.info("Extracting headlines (first sentence of article)...")
-    df['text'] = df['text'].astype(str).str.split('\n').str[0].str.strip()
-    # Drop empty texts
-    df = df[df['text'].str.len() > 3] 
-
-    logger.info(f"Total headlines before sampling: {len(df)}")
+    # Text Extraction Logic
+    logger.info("Extracting best available text (Headline -> Title -> Text First Sentence)...")
     
+    def extract_text(row):
+        # Priority 1: Headline
+        if 'headline' in row and pd.notna(row['headline']) and len(str(row['headline']).strip()) > 3:
+            return str(row['headline']).strip()
+        
+        # Priority 2: Title
+        if 'title' in row and pd.notna(row['title']) and len(str(row['title']).strip()) > 3:
+            return str(row['title']).strip()
+            
+        # Priority 3: Text / Body (First Sentence)
+        candidates = ['text', 'body']
+        for col in candidates:
+            if col in row and pd.notna(row[col]):
+                content = str(row[col]).strip()
+                if len(content) > 3:
+                    # Extract first sentence (split by newline or period)
+                    # Simple heuristic: Split by \n first (common for headlines in body), then by period
+                    first_line = content.split('\n')[0]
+                    if len(first_line) > 10:
+                        return first_line
+                    # If first line is short, try splitting by period
+                    first_sentence = content.split('.')[0]
+                    if len(first_sentence) > 3:
+                        return first_sentence + "."
+                    return content[:200] # Fallback to first 200 chars
+        return ""
+
+    # Vectorized approach is harder with conditional column checks, but we can do a fillna chain
+    # Create a 'final_text' column
+    df['final_text'] = ""
+    
+    # 1. Headline
+    if 'headline' in df.columns:
+        df['final_text'] = df['headline'].fillna("").astype(str).str.strip()
+        
+    # 2. Title (fill gaps)
+    if 'title' in df.columns:
+        mask = df['final_text'].str.len() <= 3
+        df.loc[mask, 'final_text'] = df.loc[mask, 'title'].fillna("").astype(str).str.strip()
+        
+    # 3. Text/Body (fill gaps with first sentence)
+    for col in ['text', 'body']:
+        if col in df.columns:
+            mask = df['final_text'].str.len() <= 3
+            # Extract first line/sentence efficiently
+            extracted = df.loc[mask, col].fillna("").astype(str).str.split('\n').str[0].str.strip()
+            # If still empty/short, try split by dot? 
+            # (Note: split by dot needs regex to be robust, usually split('\n')[0] is main headline fallback)
+            df.loc[mask, 'final_text'] = extracted
+
+    # Filter out empty text
+    df = df[df['final_text'].str.len() > 3].copy()
+    
+    logger.info(f"Total valid headlines before sampling: {len(df)}")
     if len(df) == 0:
-        logger.warning(f"No headlines found after filtering! Check news_path or cutoff_date. News Path: {news_path}")
-        return pd.DataFrame(columns=['date', 'company', 'sentiment_mean', 'news_count', 'sentiment_std'])
+        logger.warning("No valid text found after preprocessing.")
+        return pd.DataFrame()
 
-    # Sampling Strategy
-    # Case A: Hybrid Sampling (Percentage but ensure coverage)
-    if n_sample_per_day == 0 and sampling_frac and 0 < sampling_frac < 1.0:
-         logger.info(f"Applying Hybrid Sampling: Ensure at least 1 per day + ~{sampling_frac*100}% of valid news...")
-         
-         # Shuffle first to be random
-         df = df.sample(frac=1, random_state=42)
-         
-         # 1. Mandatory Coverage: Take first item from every (date, company) group
-         # This fixes the issue where random sampling misses entire days/companies
-         mandatory = df.groupby(['date', 'company']).head(1)
-         
-         # 2. Variable Sampling: Sample 'frac' from the REST
-         remainder = df.drop(mandatory.index)
-         if len(remainder) > 0:
-             # We sample 'frac' percent of the *remainder* to add to the mandatory set
-             # Or 'frac' of total? User said "randomly sample percent". 
-             # Let's simple sample 'frac' from remainder.
-             sampled_remainder = remainder.sample(frac=sampling_frac, random_state=42)
-             df = pd.concat([mandatory, sampled_remainder])
-         else:
-             df = mandatory
-             
-         logger.info(f"Headlines after hybrid sampling: {len(df)}")
-
-    # Case B: Fixed Cap (Original Logic)
-    elif n_sample_per_day > 0:
-        logger.info(f"Sampling up to {n_sample_per_day} headlines per company per day...")
-        # Shuffle deterministically
+    # Stratified Sampling Strategy
+    if n_sample_per_day > 0:
+        logger.info(f"Applying Stratified Sampling: Up to {n_sample_per_day} items per (Date, Company)...")
+        # Shuffle to ensure random selection within groups
         df = df.sample(frac=1, random_state=42)
-        # Take top N per group
+        # Group by date/company and take top N
         df = df.groupby(['date', 'company']).head(n_sample_per_day)
-        
-        logger.info(f"Total headlines after sampling: {len(df)}")
-    
-    # Case C: Percentage Only (without coverage guarantee - deprecated by Hybrid, but logic remains if needed)
-    elif sampling_frac and 0 < sampling_frac < 1.0:
-        df = df.sample(frac=sampling_frac, random_state=42)
-        
-    # Run analysis
+    else:
+        logger.info("No sampling limit set. Processing all available news.")
+
+    logger.info(f"Final Count for Analysis: {len(df)}")
+
+    # Run Analysis
     analyzer = SentimentAnalyzer()
-    scored_df = analyzer.analyze_headlines(df, text_col='text')
+    # Pass 'final_text' as the column to analyze
+    scored_df = analyzer.analyze_headlines(df, text_col='final_text')
     
     # Aggregate
-    # We want features per company per day
     agg_features = scored_df.groupby(['date', 'company']).agg(
         sentiment_mean=('sentiment_score', 'mean'),
         news_count=('sentiment_score', 'count'),
-        sentiment_std=('sentiment_score', 'std') # Extra feature
+        sentiment_std=('sentiment_score', 'std')
     ).reset_index()
     
+    # Gap Filling
+    logger.info("Filling missing dates with neutral sentiment (0.0)...")
+    agg_features = fill_missing_sentiment_dates(agg_features)
+    
     if output_path:
-        logger.info(f"Saving aggregated sentiment features to {output_path}...")
+        logger.info(f"Saving sentiment features to {output_path}...")
         agg_features.to_csv(output_path, index=False)
         
     return agg_features
