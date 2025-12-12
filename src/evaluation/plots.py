@@ -212,57 +212,73 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
     fig.tight_layout()
     plt.show()
 
-def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame, rolling_window: int = 1):
+def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame):
     """
-    Plots the daily sentiment scores and moving averages for all companies.
+    Plots the Daily Average Sentiment for major companies using specific brand colors.
     
     Args:
         daily_sentiment_df (pd.DataFrame): DataFrame with 'date', 'company', 'sentiment_mean'.
-        rolling_window (int): Window size for moving average (default 1 day = Daily data).
     """
     if daily_sentiment_df.empty:
-        print("No data to plot.")
+        print("No sentiment data available to plot.")
         return
 
     # Ensure date is datetime
     df = daily_sentiment_df.copy()
     df['date'] = pd.to_datetime(df['date'])
     
+    # Specific Color Mapping requested by user
+    # Amazon=Yellow, Google=Blue, Microsoft=Red, Apple=Green
+    color_map = {
+        'Amazon': '#FF9900',   # Amazon Yellow/Orange
+        'Google': '#4285F4',   # Google Blue
+        'Microsoft': '#F25022',# Microsoft Red/Orange
+        'Apple': '#34A853',    # Apple Green (using Google Green for visibility or standard Green)
+        # Fallbacks if names differ slightly
+        'AMZN': '#FF9900',
+        'GOOG': '#4285F4',
+        'GOOGL': '#4285F4',
+        'MSFT': '#F25022',
+        'AAPL': '#34A853'
+    }
+    
     companies = df['company'].unique()
+    n_companies = len(companies)
     
-    plt.figure(figsize=(14, 6))
+    # Grid: 2 columns
+    cols = 2
+    rows = (n_companies + 1) // 2
     
-    # Define a color palette
-    palette = sns.color_palette("husl", len(companies))
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 4 * rows), sharex=True, sharey=True)
+    axes = axes.flatten() 
     
     for i, company in enumerate(companies):
+        ax = axes[i]
         subset = df[df['company'] == company].sort_values('date')
         
-        # Calculate Moving Average
-        if rolling_window > 1:
-            subset['ma'] = subset['sentiment_mean'].rolling(window=rolling_window, min_periods=1).mean()
-            label_text = f"{company} ({rolling_window}-Day MA)"
-            plot_col = 'ma'
-        else:
-            subset['ma'] = subset['sentiment_mean']
-            label_text = f"{company} (Daily)"
-            plot_col = 'sentiment_mean'
+        # Get color or default to gray
+        color = color_map.get(company, 'gray')
         
-        color = palette[i]
+        # Plot Daily Average (Solid Line + Markers)
+        # Using a marker ensures individual days are visible even if disconnected
+        ax.plot(subset['date'], subset['sentiment_mean'], 
+                color=color, linewidth=1.5, marker='o', markersize=3, alpha=0.9, label='Daily Avg')
         
-        # Plot Raw (faint) if smoothing is applied
-        if rolling_window > 1:
-            plt.scatter(subset['date'], subset['sentiment_mean'], color=color, alpha=0.1, s=10, label='_nolegend_')
+        # Reference Line (Neutral)
+        ax.axhline(0, color='black', linestyle='-', linewidth=0.8, alpha=0.3)
         
-        # Plot Main Line (bold)
-        plt.plot(subset['date'], subset[plot_col], color=color, linewidth=2, label=label_text)
-
-    title_text = f"Sentiment Trends: {rolling_window}-Day Moving Average" if rolling_window > 1 else "Daily Sentiment Trends"
-    plt.title(title_text, fontsize=16)
-    plt.xlabel("Date")
-    plt.ylabel("Sentiment Score (-1 to 1)")
-    plt.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.5)
-    plt.legend(loc='upper left')
-    plt.grid(True, alpha=0.3)
+        # Styling
+        ax.set_title(f"{company}", fontweight='bold', fontsize=12, color=color)
+        ax.grid(True, alpha=0.15)
+        ax.set_ylim(-1.05, 1.05) # Fixed range for sentiment
+    
+    # Hide unused axes
+    for j in range(i + 1, len(axes)):
+        axes[j].axis('off')
+        
+    # Global Labels
+    fig.text(0.5, 0.0, 'Date', ha='center', fontsize=12)
+    fig.text(0.0, 0.5, 'Daily Sentiment Score', va='center', rotation='vertical', fontsize=12)
+    
     plt.tight_layout()
     plt.show()
