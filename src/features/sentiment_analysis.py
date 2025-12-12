@@ -4,6 +4,7 @@ Sentiment analysis module using FinBERT.
 import logging
 from typing import Optional, Tuple
 import pandas as pd
+import numpy as np
 import torch
 from transformers import pipeline
 from tqdm import tqdm
@@ -13,24 +14,142 @@ from src.data.news_loader import get_google_news_titles
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def fill_missing_sentiment_dates(
+def apply_exponential_decay(
+    df: pd.DataFrame,
+    date_col: str = 'date',
+    sentiment_col: str = 'sentiment_mean',
+    decay_factor: float = 0.85
+) -> pd.DataFrame:
+    """
+    Applies exponential time decay to fill missing sentiment values.
+    S_t = S_new if news exists, else S_{t-1} * lambda
+    
+    Args:
+        df: Input DataFrame with continuous date index per company.
+        date_col: Date column name.
+        sentiment_col: Sentiment column to decay.
+        decay_factor: Lambda decay factor (0 < lambda < 1).
+        
+    Returns:
+        pd.DataFrame: DataFrame with filled sentiment values.
+    """
+    df = df.copy()
+    
+    # Iterate to apply decay (easiest way to handle sequential dependence)
+    # Vectorized approaches exist but this is clearer for simple recursive decay
+    # Optimization: Use grouped apply
+    
+    sentiment_values = df[sentiment_col].values
+    has_news = df['news_count'].values > 0
+    decayed_values = np.zeros_like(sentiment_values)
+    
+    last_val = 0.0
+    
+    for i in range(len(sentiment_values)):
+        if has_news[i]:
+            last_val = sentiment_values[i]
+        else:
+            last_val = last_val * decay_factor
+        decayed_values[i] = last_val
+        
+    df[sentiment_col] = decayed_values
+    return df
+
+def calculate_market_context(
+    df: pd.DataFrame,
+    date_col: str = 'date',
+    company_col: str = 'company',
+    sentiment_col: str = 'sentiment_mean'
+) -> pd.DataFrame:
+    """
+    Calculates the average sentiment of all OTHER companies for each day.
+    
+    Args:
+        df: Input DataFrame containing all companies.
+        date_col: Date column.
+        company_col: Company column.
+        sentiment_col: Sentiment column.
+        
+    Returns:
+        pd.DataFrame: DataFrame with 'market_sentiment' column merged in.
+    """
+    # Calculate global daily mean
+    daily_market = df.groupby(date_col)[sentiment_col].mean().rename('market_mean')
+    
+    # Merge back
+    df = df.merge(daily_market, on=date_col, how='left')
+    
+    # For each row, the market context is (Sum_all - Self) / (N-1)
+    # But approximate with 'market_mean' is usually sufficient if N is large.
+    # For N=4 (AAPL, MSFT, GOOG, AMZN), explicit leave-one-out is better.
+    
+    # Leave-one-out calculation
+    # Sum of all sentiments per day
+    daily_sum = df.groupby(date_col)[sentiment_col].sum()
+    daily_count = df.groupby(date_col)[sentiment_col].count()
+    
+    def get_context(row):
+        d = row[date_col]
+        val = row[sentiment_col]
+        total = daily_sum.get(d, 0)
+        n = daily_count.get(d, 1)
+        
+        if n <= 1:
+            return 0.0 # No context if alone
+        
+        return (total - val) / (n - 1)
+        
+    df['market_sentiment'] = df.apply(get_context, axis=1)
+    return df.drop(columns=['market_mean'], errors='ignore')
+
+def calculate_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates advanced sentiment features:
+    - Momentum (3-day change)
+    - Moving Average (7-day)
+    - Volatility (7-day rolling std)
+    
+    Args:
+        df: Input DataFrame (expected to be single company, sorted by date).
+        
+    Returns:
+        pd.DataFrame: DataFrame with new columns.
+    """
+    # Ensure sorted by date
+    df = df.sort_values('date')
+    
+    # 1. Momentum (3-day difference)
+    # How much did sentiment change compared to 3 days ago?
+    df['sentiment_momentum_3d'] = df['sentiment_mean'].diff(3)
+    
+    # 2. Moving Average (7-day)
+    # Smooth trend
+    df['sentiment_ma_7d'] = df['sentiment_mean'].rolling(window=7, min_periods=1).mean()
+    
+    # 3. Volatility (7-day rolling std)
+    # Uncertainty/Noise measure
+    df['sentiment_volatility_7d'] = df['sentiment_mean'].rolling(window=7, min_periods=1).std().fillna(0)
+    
+    return df
+
+def process_sentiment_timeseries(
     df: pd.DataFrame, 
     date_col: str = 'date',
     company_col: str = 'company',
-    fill_value: float = 0.0
+    decay_factor: float = 0.85
 ) -> pd.DataFrame:
     """
-    Reindexes the DataFrame to ensure every day in the range is present for each company.
-    Missing days are filled with neutral sentiment (0.0) and 0 news count.
+    Reindexes DataFrame to continuous dates and applies exponential decay for missing values.
+    Also adds market context features.
     
     Args:
         df: Input sentiment DataFrame.
         date_col: Name of date column.
         company_col: Name of company column.
-        fill_value: Value to fill missing sentiment scores (default 0.0).
+        decay_factor: Decay factor for missing news days.
         
     Returns:
-        pd.DataFrame: Reindexed DataFrame with continuous daily range per company.
+        pd.DataFrame: Processed DataFrame with continuous daily range per company.
     """
     if df.empty:
         return df
@@ -45,7 +164,7 @@ def fill_missing_sentiment_dates(
     
     companies = df[company_col].unique()
     
-    reindexed_dfs = []
+    processed_dfs = []
     
     for company in companies:
         # Filter for company
@@ -57,18 +176,26 @@ def fill_missing_sentiment_dates(
         # Fill Metadata
         comp_df[company_col] = company
         
-        # Fill Metrics
-        comp_df['sentiment_mean'] = comp_df['sentiment_mean'].fillna(fill_value)
+        # Fill News Count first (0 for missing days)
         comp_df['news_count'] = comp_df['news_count'].fillna(0)
         
-        # Determine std behavior (NaN std for inserted days? or 0? keeping NaN is likely safer for stats)
-        # comp_df['sentiment_std'] = comp_df['sentiment_std'] # NaN preserved
+        # Apply Exponential Decay to Sentiment Mean
+        # We need to treat NaNs as "no news" -> apply decay
+        # Existing values remain, NaNs get decayed
+        comp_df = comp_df.reset_index().rename(columns={'index': date_col})
+        comp_df = apply_exponential_decay(comp_df, date_col=date_col, sentiment_col='sentiment_mean', decay_factor=decay_factor)
         
-        # Reset index to make date a column
-        comp_df.index.name = date_col
-        reindexed_dfs.append(comp_df.reset_index())
+        # Calculate Advanced Features (Momentum, Volatility, MA)
+        comp_df = calculate_advanced_features(comp_df)
         
-    return pd.concat(reindexed_dfs, ignore_index=True)
+        processed_dfs.append(comp_df)
+        
+    full_df = pd.concat(processed_dfs, ignore_index=True)
+    
+    # Calculate Market Context
+    full_df = calculate_market_context(full_df, date_col=date_col, company_col=company_col, sentiment_col='sentiment_mean')
+    
+    return full_df
 
 class SentimentAnalyzer:
     """
@@ -218,41 +345,92 @@ def integrate_sentiment_data(
         # 2. Aggregate
         daily_sentiment = analyzer.aggregate_daily_sentiment(scored_news, date_col=date_col)
     
-    # 3. Lag (Shift by 1 day)
+    # 3. Process Time Series (Decay + Market Context) instead of just Fillna
+    # This replaces the fill_missing_sentiment_dates logic if it was called before, but here we do it integrally.
+    # Ideally, integrate_sentiment_data should receive raw-ish data and do the processing.
+    # However, if 'news_data' is just one company, market context might be partial.
+    # Assuming 'news_data' contains all relevant companies.
+    
+    logger.info("Processing sentiment time series (Exponential Decay + Market Context)...")
+    
+    # Ensure date is a column, as process_sentiment_timeseries expects it
+    if date_col not in daily_sentiment.columns and isinstance(daily_sentiment.index, pd.DatetimeIndex):
+         daily_sentiment = daily_sentiment.reset_index()
+         
+    if 'company' in daily_sentiment.columns:
+        # Full multi-company processing
+        daily_sentiment = process_sentiment_timeseries(daily_sentiment, date_col=date_col)
+    else:
+        # Single company fallback (just reindex and decay)
+        # Add dummy company col if missing
+        daily_sentiment['company'] = 'UNKNOWN'
+        daily_sentiment = process_sentiment_timeseries(daily_sentiment, date_col=date_col)
+    
+    # 4. Lag (Shift by 1 day)
     # We want features from day T to predict day T+1. 
-    # Must reindex to match stock structure FIRST to ensure shift aligns with trading days.
-    # Note: This simple approach effectively maps Previous Trading Day -> Current Trading Day.
-    # Weekend news might be lost if not aggregated into Monday, but matches "1-day lag" request.
     if not isinstance(stock_df.index, pd.DatetimeIndex):
         stock_df.index = pd.to_datetime(stock_df.index)
         
+    # Filter for specific stock if needed (assuming stock_df is for one company)
+    # But daily_sentiment might have multiple. We need to merge on Date.
+    # If stock_df represents ONE company (e.g. AAPL), we filter daily_sentiment for that company.
+    # Usually stock_df is single-asset here.
+    
+    # Basic check: does stock_df have a company column?
+    target_company = None
+    if 'Symbol' in stock_df.columns:
+        target_company = stock_df['Symbol'].iloc[0]
+    elif 'company' in stock_df.columns:
+        target_company = stock_df['company'].iloc[0]
+    
+    # If we found a target company, filter sentiment for it
+    if target_company and target_company in daily_sentiment['company'].unique():
+        daily_sentiment = daily_sentiment[daily_sentiment['company'] == target_company].copy()
+        
+    # Set index to date for shifting
+    daily_sentiment = daily_sentiment.set_index(date_col)
+    
+    # Reindex to stock days
     daily_sentiment = daily_sentiment.reindex(stock_df.index)
     
     logger.info("Applying 1-day lag to sentiment features...")
-    daily_sentiment_lagged = daily_sentiment.shift(1)
+    # Shift features
+    features_to_lag = [
+        'sentiment_mean', 'news_count', 'market_sentiment',
+        'sentiment_momentum_3d', 'sentiment_ma_7d', 'sentiment_volatility_7d'
+    ]
+    daily_sentiment_lagged = daily_sentiment[features_to_lag].shift(1)
     
     # Rename columns to indicate lag
     daily_sentiment_lagged.columns = [f"{col}_lag1" for col in daily_sentiment_lagged.columns]
     
-    # 4. Merge
+    # 5. Merge
     logger.info("Merging with stock data...")
     if not isinstance(stock_df.index, pd.DatetimeIndex):
         stock_df.index = pd.to_datetime(stock_df.index)
         
-    # Check for overlapping columns and drop them from stock_df to allow clean merge (idempotency)
+    # Check for overlapping columns
     overlap_cols = stock_df.columns.intersection(daily_sentiment_lagged.columns)
     if not overlap_cols.empty:
-        logger.info(f"Dropping existing sentiment columns from stock data to avoid duplicates: {overlap_cols.tolist()}")
         stock_df = stock_df.drop(columns=overlap_cols)
 
-    # Left join to keep all stock rows
+    # Left join
     merged_df = stock_df.join(daily_sentiment_lagged, how='left')
     
-    # 5. Fill NaNs
-    # For news count, fill with 0 (no news). For sentiment, maybe 0 (neutral) or forward fill.
-    # Let's simple fill 0 for now as 'no news' implies neutral signal or no signal.
+    # 6. Fill NaNs (Final Safety)
+    # News count -> 0
+    # Sentiment -> 0 (Neutral) if start of series has no data
     merged_df['news_count_lag1'] = merged_df['news_count_lag1'].fillna(0)
     merged_df['sentiment_mean_lag1'] = merged_df['sentiment_mean_lag1'].fillna(0)
+    merged_df['market_sentiment_lag1'] = merged_df['market_sentiment_lag1'].fillna(0)
+    
+    # Fill new features
+    # Momentum: 0 (no change)
+    # MA: 0 (neutral)
+    # Volatility: 0 (stable)
+    merged_df['sentiment_momentum_3d_lag1'] = merged_df['sentiment_momentum_3d_lag1'].fillna(0)
+    merged_df['sentiment_ma_7d_lag1'] = merged_df['sentiment_ma_7d_lag1'].fillna(0)
+    merged_df['sentiment_volatility_7d_lag1'] = merged_df['sentiment_volatility_7d_lag1'].fillna(0)
     
     return merged_df
 
@@ -433,9 +611,9 @@ def generate_daily_sentiment_features(
         sentiment_std=('sentiment_score', 'std')
     ).reset_index()
     
-    # Gap Filling
-    logger.info("Filling missing dates with neutral sentiment (0.0)...")
-    agg_features = fill_missing_sentiment_dates(agg_features)
+    # Gap Filling and Advanced Feature Engineering
+    logger.info("Processing sentiment time series (Exponential Decay + Market Context)...")
+    agg_features = process_sentiment_timeseries(agg_features)
     
     if output_path:
         logger.info(f"Saving sentiment features to {output_path}...")

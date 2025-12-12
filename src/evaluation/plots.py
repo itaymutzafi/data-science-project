@@ -280,5 +280,83 @@ def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame):
     fig.text(0.5, 0.0, 'Date', ha='center', fontsize=12)
     fig.text(0.0, 0.5, 'Daily Sentiment Score', va='center', rotation='vertical', fontsize=12)
     
+    
     plt.tight_layout()
     plt.show()
+
+def plot_sentiment_decay_verification():
+    """
+    Visualizes the effect of Exponential Decay on a synthetic signal
+    to verify the logic of filling missing dates.
+    """
+    import numpy as np
+    import pandas as pd
+    from src.features.sentiment_analysis import process_sentiment_timeseries
+    
+    # Create a synthetic signal with gaps
+    demo_dates = pd.date_range("2024-01-01", periods=15)
+    demo_df = pd.DataFrame({'date': demo_dates, 'company': 'Demo', 'sentiment_mean': np.nan, 'news_count': 0})
+    
+    # Set some events
+    demo_df.loc[0, 'sentiment_mean'] = 1.0; demo_df.loc[0, 'news_count'] = 5
+    demo_df.loc[5, 'sentiment_mean'] = -0.8; demo_df.loc[5, 'news_count'] = 3
+    
+    # Apply processing
+    processed_demo = process_sentiment_timeseries(demo_df)
+    
+    plt.figure(figsize=(10, 5))
+    plt.plot(processed_demo['date'], processed_demo['sentiment_mean'], marker='o', label='Decayed Sentiment', color='purple')
+    
+    # Plot original events
+    events = demo_df.dropna(subset=['sentiment_mean'])
+    plt.scatter(events['date'], events['sentiment_mean'], color='red', s=100, label='News Events', zorder=5)
+    
+    plt.title("Verification: Exponential Decay of Sentiment Signal ($S_t = S_{t-1} \\times 0.85$)", fontweight='bold')
+    plt.ylabel("Sentiment Score")
+    plt.xlabel("Date")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.show()
+
+def plot_advanced_sentiment_features(daily_sentiment_df: pd.DataFrame):
+    """
+    Plots advanced sentiment features (Momentum, Volatility, MA) for all companies.
+    
+    Args:
+        daily_sentiment_df (pd.DataFrame): DataFrame with sentiment features.
+    """
+    if daily_sentiment_df.empty:
+        print("No data to plot.")
+        return
+        
+    companies = daily_sentiment_df['company'].unique()
+    
+    for company in companies:
+        subset = daily_sentiment_df[daily_sentiment_df['company'] == company].iloc[-100:] # Last 100 days
+        if subset.empty:
+            continue
+            
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+        
+        # Plot 1: Sentiment vs MA
+        axes[0].plot(subset['date'], subset['sentiment_mean'], label='Daily Sentiment', alpha=0.4, color='gray')
+        axes[0].plot(subset['date'], subset['sentiment_ma_7d'], label='7-Day MA', linewidth=2, color='#1f77b4')
+        axes[0].set_title(f"{company}: Sentiment Trend (7-Day MA)", fontweight='bold')
+        axes[0].legend(loc='upper left')
+        axes[0].grid(True, alpha=0.3)
+        
+        # Plot 2: Volatility
+        axes[1].plot(subset['date'], subset['sentiment_volatility_7d'], color='#ff7f0e', label='7-Day Volatility')
+        axes[1].set_title(f"{company}: Sentiment Volatility (Risk)", fontweight='bold')
+        axes[1].legend(loc='upper left')
+        axes[1].grid(True, alpha=0.3)
+        
+        # Plot 3: Momentum & Market Context
+        axes[2].bar(subset['date'], subset['sentiment_momentum_3d'], color='purple', alpha=0.3, label='3-Day Momentum')
+        axes[2].plot(subset['date'], subset['market_sentiment'], label='Market Context (Peers)', color='green', linestyle='--')
+        axes[2].set_title(f"{company}: Momentum & Market Context", fontweight='bold')
+        axes[2].legend(loc='upper left')
+        axes[2].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
