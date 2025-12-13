@@ -66,7 +66,8 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
         "MAE": mae,
         "R2": r2,
         "Directional Accuracy": da,
-        "Strategy Sharpe": strategy_sharpe
+        "Strategy Sharpe": strategy_sharpe,
+        "IC": y_true.corr(y_pred) # Information Coefficient (Pearson)
     }
 
 
@@ -78,4 +79,5 @@ def print_eval(metrics: Dict[str, float], model_name: str = "Model"):
     print(f"MAE:  {metrics['MAE']:.6f}")
     print(f"R2:   {metrics['R2']:.6f} (Higher is better)")
     print(f"DA:   {metrics['Directional Accuracy']:.2%} (Directional Accuracy)")
+    print(f"IC:   {metrics['IC']:.4f} (Information Coefficient)")
     print(f"Sharpe: {metrics['Strategy Sharpe']:.4f} (Annualized Strategy Return)")

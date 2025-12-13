@@ -186,3 +186,25 @@ def fetch_data_for_eda(ticker: str, start_time: date, end_time: date):
     df['Return'] = df['Close'].pct_change()
     df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
     return df
+
+
+def load_stock_data(path: Union[str, Path]) -> pd.DataFrame:
+    """
+    Loads stock data from a Parquet file, ensuring the index is a timezone-naive DatetimeIndex.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Stock data file not found at: {path}")
+    
+    print(f"Loading stock data from {path}...")
+    df = pd.read_parquet(path)
+    
+    # Ensure index is DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+            
+    # Remove timezone information if present
+    if df.index.tz is not None:
+        df.index = df.index.tz_localize(None)
+        
+    return df

@@ -49,10 +49,10 @@ class RandomBaseline:
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         
-    def fit(self, y_train: pd.Series):
+    def fit(self, X: pd.DataFrame, y: pd.Series):
         """Learn mean and std from training target."""
-        self.mu = y_train.mean()
-        self.sigma = y_train.std()
+        self.mu = y.mean()
+        self.sigma = y.std()
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
         return pd.Series(
@@ -74,9 +74,9 @@ class MarketBenchmark:
     def __init__(self):
         self.mu = 0.0
         
-    def fit(self, y_train: pd.Series):
+    def fit(self, X: pd.DataFrame, y: pd.Series):
         """Learn the historical mean return."""
-        self.mu = y_train.mean()
+        self.mu = y.mean()
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """Predict the historical mean for all steps."""

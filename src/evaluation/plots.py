@@ -5,9 +5,11 @@ to ensure all figures in the report have a uniform, professional appearance.
 """
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import matplotlib.patches as patches
 import seaborn as sns
+from src.config import COMPANY_COLORS, TICKER_TO_COMPANY_MAP, TICKER
 
 def set_style():
     """Sets the global plotting style for the project."""
@@ -17,12 +19,12 @@ def set_style():
     # Custom overrides for better readability in reports
     plt.rcParams.update({
         "figure.figsize": (12, 6),
-        "axes.titlesize": 14,
-        "axes.labelsize": 12,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 10,
-        "lines.linewidth": 1.5,
+        "axes.titlesize": 16,     # Larger font size as requested
+        "axes.labelsize": 14,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
+        "legend.fontsize": 12,
+        "lines.linewidth": 2.0,
         "grid.alpha": 0.3,
         "figure.dpi": 150  # High resolution for export
     })
@@ -36,6 +38,8 @@ def save_fig(fig, filename: str, folder: str = "results"):
 def plot_walk_forward_validation(n_splits=5, total_samples=100):
     """Visualizes the Strict Walk-Forward Validation (Expanding Window) scheme."""
     fig, ax = plt.subplots(figsize=(10, 5))
+    
+
     
     # Simulate expanding window indices
     step = total_samples // (n_splits + 1)
@@ -70,7 +74,7 @@ def plot_price_vs_returns(df: pd.DataFrame, target_col: str) -> None:
     fig, axes = plt.subplots(2, 1, sharex=True)
     
     # Plot 1: Raw Price
-    axes[0].plot(df.index, df['Close'], label='Close Price', color='#1f77b4')
+    axes[0].plot(df.index, df['Close'], label='Close Price', color=COMPANY_COLORS.get(TICKER, '#1f77b4'))
     axes[0].set_title("Raw Price ($P_t$): Non-Stationary", fontweight='bold')
     axes[0].legend(loc='upper left')
     
@@ -149,9 +153,9 @@ def plot_context_comparison(target_series: pd.Series, aux_data: pd.DataFrame, ta
     norm_macro = (aux['Nasdaq_100'] / aux['Nasdaq_100'].iloc[0]) * 100
     norm_segment = (aux['NVIDIA_Segment_Leader'] / aux['NVIDIA_Segment_Leader'].iloc[0]) * 100
     
-    ax1.plot(norm_target, label=f'{target_name} (Target)', linewidth=2.5, color='#1f77b4')
+    ax1.plot(norm_target, label=f'{target_name} (Target)', linewidth=2.5, color=COMPANY_COLORS.get(target_name, '#1f77b4'))
     ax1.plot(norm_macro, label='Nasdaq 100 (Macro Baseline)', linestyle='--', alpha=0.8, color='black')
-    ax1.plot(norm_segment, label='NVIDIA (Segment Peer)', linestyle=':', alpha=0.8, color='green')
+    ax1.plot(norm_segment, label='NVIDIA (Segment Peer)', linestyle=':', alpha=0.8, color=COMPANY_COLORS.get('NVDA', 'green'))
     
     ax1.set_title(f'Contextual Analysis: {target_name} vs. Market & Segment', fontsize=12)
     ax1.set_ylabel('Normalized Price (Base=100)')
@@ -214,74 +218,82 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = 'sentiment_me
 
 def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame):
     """
-    Plots the Daily Average Sentiment for major companies using specific brand colors.
+    Plots a 4-split grid (2x2) showing both Raw Sentiment (daily means) and 
+    Smoothed (7-day MA) Trends for all major companies.
     
     Args:
-        daily_sentiment_df (pd.DataFrame): DataFrame with 'date', 'company', 'sentiment_mean'.
+        daily_sentiment_df (pd.DataFrame): DataFrame with 'date', 'company', 'sentiment_mean', 'sentiment_ma_7d'.
     """
     if daily_sentiment_df.empty:
         print("No sentiment data available to plot.")
         return
 
-    # Ensure date is datetime
     df = daily_sentiment_df.copy()
     df['date'] = pd.to_datetime(df['date'])
     
-    # Specific Color Mapping requested by user
-    # Amazon=Yellow, Google=Blue, Microsoft=Red, Apple=Green
-    color_map = {
-        'Amazon': '#FF9900',   # Amazon Yellow/Orange
-        'Google': '#4285F4',   # Google Blue
-        'Microsoft': '#F25022',# Microsoft Red/Orange
-        'Apple': '#34A853',    # Apple Green (using Google Green for visibility or standard Green)
-        # Fallbacks if names differ slightly
-        'AMZN': '#FF9900',
-        'GOOG': '#4285F4',
-        'GOOGL': '#4285F4',
-        'MSFT': '#F25022',
-        'AAPL': '#34A853'
+    # Ensure MA exists
+    if 'sentiment_ma_7d' not in df.columns:
+        df['sentiment_ma_7d'] = df.groupby('company')['sentiment_mean'].transform(lambda x: x.rolling(7, min_periods=1).mean())
+
+    companies = ['Apple', 'Amazon', 'Google', 'Microsoft'] # Fixed order
+    available_companies = [c for c in companies if c in df['company'].unique()]
+    
+    if not available_companies:
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12), sharex=True, sharey=True)
+    axes_flat = axes.flatten()
+    
+    # Fixed mapping ensures consistent placement regardless of missing data
+    # (0,0)=Apple, (0,1)=Amazon, (1,0)=Google, (1,1)=Microsoft
+    grid_map = {
+        'Apple': 0, 
+        'Amazon': 1, 
+        'Google': 2, 
+        'Microsoft': 3
     }
     
-    companies = df['company'].unique()
-    n_companies = len(companies)
-    
-    # Grid: 2 columns
-    cols = 2
-    rows = (n_companies + 1) // 2
-    
-    fig, axes = plt.subplots(rows, cols, figsize=(15, 4 * rows), sharex=True, sharey=True)
-    axes = axes.flatten() 
-    
-    for i, company in enumerate(companies):
-        ax = axes[i]
+    for company in companies: # Iterate fixed list
+        if company not in grid_map: continue
+        
+        idx = grid_map[company]
+        ax = axes_flat[idx]
+        
         subset = df[df['company'] == company].sort_values('date')
         
-        # Get color or default to gray
-        color = color_map.get(company, 'gray')
+        if subset.empty:
+            ax.text(0.5, 0.5, "No Data Available", ha='center', va='center')
+            ax.set_title(company, fontweight='bold')
+            continue
+
+        color = COMPANY_COLORS.get(company, 'blue')
         
-        # Plot Daily Average (Solid Line + Markers)
-        # Using a marker ensures individual days are visible even if disconnected
-        ax.plot(subset['date'], subset['sentiment_mean'], 
-                color=color, linewidth=1.5, marker='o', markersize=3, alpha=0.9, label='Daily Avg')
+        # 1. Raw Daily Sentiment (Scatter) - Only plot days with actual news
+        raw_days = subset[subset['news_count'] > 0]
+        if not raw_days.empty:
+            ax.scatter(raw_days['date'], raw_days['sentiment_mean'], 
+                       color=color, alpha=0.3, s=15, label='Daily Raw Sentiment')
         
-        # Reference Line (Neutral)
-        ax.axhline(0, color='black', linestyle='-', linewidth=0.8, alpha=0.3)
+        # 2. Smoothed Trend (Line)
+        # Handle sparse data: drop NaNs for plotting line to avoid gaps
+        trend_data = subset.dropna(subset=['sentiment_ma_7d'])
+        if not trend_data.empty:
+            ax.plot(trend_data['date'], trend_data['sentiment_ma_7d'], 
+                    color=color, linewidth=2.5, label='7-Day Moving Avg')
         
-        # Styling
-        ax.set_title(f"{company}", fontweight='bold', fontsize=12, color=color)
-        ax.grid(True, alpha=0.15)
-        ax.set_ylim(-1.05, 1.05) # Fixed range for sentiment
-    
-    # Hide unused axes
-    for j in range(i + 1, len(axes)):
-        axes[j].axis('off')
+        ax.set_title(f"{company}", fontweight='bold', fontsize=12)
+        ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.5)
+        ax.grid(True, alpha=0.3)
         
-    # Global Labels
-    fig.text(0.5, 0.0, 'Date', ha='center', fontsize=12)
-    fig.text(0.0, 0.5, 'Daily Sentiment Score', va='center', rotation='vertical', fontsize=12)
-    
-    
-    plt.tight_layout()
+        # Axis formatting
+        ax.tick_params(axis='x', rotation=45)
+        
+        # Legend only on first plot
+        if idx == 0:
+            ax.legend(loc='upper right', fontsize=9, framealpha=0.9)
+
+    fig.suptitle("Sentiment Trends: Raw Signals vs. Smoothed Trends", fontsize=16, fontweight='bold', y=0.98)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.98]) 
     plt.show()
 
 def plot_sentiment_decay_verification():
@@ -318,9 +330,114 @@ def plot_sentiment_decay_verification():
     plt.grid(True, alpha=0.3)
     plt.show()
 
+def plot_sentiment_signal_quality(daily_sentiment_df: pd.DataFrame, company: str = 'Apple', ax=None):
+    """
+    Visualizes the "Signal Continuity" aspect (Raw vs Decayed) for a single company.
+    Designed to be part of a larger grid.
+    
+    Args:
+        daily_sentiment_df (pd.DataFrame): DataFrame with sentiment features.
+        company (str): Company to visualize.
+        ax (matplotlib.axes.Axes): Axis to plot on.
+    """
+    if daily_sentiment_df.empty:
+        return
+        
+    subset = daily_sentiment_df[daily_sentiment_df['company'] == company].copy().sort_values('date')
+    if subset.empty:
+        return
+        
+    # Last 180 days
+    subset = subset.iloc[-180:] 
+    
+    # Color Setup
+    main_color = COMPANY_COLORS.get(company, '#34A853')
+    
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        
+    # "Raw" points are where news_count > 0
+    raw_points = subset[subset['news_count'] > 0]
+    
+    # 1. Plot Continuous (Decayed) Signal Line
+    ax.plot(subset['date'], subset['sentiment_mean'], color=main_color, linestyle='-', alpha=0.6, label='Decayed Signal')
+    
+    # 2. Plot Raw Points
+    ax.scatter(raw_points['date'], raw_points['sentiment_mean'], color=main_color, s=25, label='Raw News Days', zorder=5)
+    
+    ax.set_title(f"{company}", fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    # No legend per subplot to save space, or minimal
+
+
+def plot_day_sentiment_breakdown(daily_news_df: pd.DataFrame, date: str, company: str, daily_score: float):
+    """
+    Visualizes the raw news sentiment distribution for a single day to demystify the aggregation.
+    
+    Args:
+        daily_news_df (pd.DataFrame): Subset of news for that day/company with 'sentiment' scores.
+        date (str): The date being analyzed.
+        company (str): The company name.
+        daily_score (float): The final aggregated score for that day.
+    """
+    if daily_news_df.empty:
+        print(f"No news found for {company} on {date}")
+        return
+
+    # Extract scores
+    scores = daily_news_df['sentiment_score'].values
+    headlines = daily_news_df['headline'].values
+    
+    # Create Layout
+    fig = plt.figure(figsize=(14, 7))
+    grid = plt.GridSpec(1, 2, width_ratios=[1.2, 1])
+    
+    # Left: Distribution
+    ax1 = fig.add_subplot(grid[0])
+    sns.histplot(scores, kde=True, ax=ax1, color='skyblue', bins=10)
+    ax1.axvline(daily_score, color='red', linestyle='--', linewidth=2, label=f'Daily Mean: {daily_score:.2f}')
+    ax1.set_title(f"Sentiment Distribution: {company} on {date}", fontweight='bold')
+    ax1.set_xlabel("Sentiment Score (-1 to 1)")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Right: Top/Bottom Headlines
+    ax2 = fig.add_subplot(grid[1])
+    ax2.axis('off')
+    
+    # Sort samples
+    # Deduplicate headlines to avoid repetitive "Key Headlines"
+    daily_news_df = daily_news_df.drop_duplicates(subset=['headline'])
+    
+    daily_news_df = daily_news_df.sort_values(by='sentiment_score', ascending=False)
+    top_pos = daily_news_df.head(3)
+    top_neg = daily_news_df.tail(3)
+    
+    import textwrap
+    
+    text_content = f"### Key Headlines ({len(daily_news_df)} Total)\n\n"
+    
+    text_content += "**Most Positive:**\n"
+    for _, row in top_pos.iterrows():
+        headline = row['headline']
+        short_headline = textwrap.shorten(headline, width=60, placeholder="...")
+        text_content += f"😄 ({row['sentiment_score']:.2f}) {short_headline}\n"
+        
+    text_content += "\n**Most Negative:**\n"
+    for _, row in top_neg.iterrows():
+        headline = row['headline']
+        short_headline = textwrap.shorten(headline, width=60, placeholder="...")
+        text_content += f"😡 ({row['sentiment_score']:.2f}) {short_headline}\n"
+        
+    ax2.text(0.05, 0.95, text_content, fontsize=10, va='top', ha='left', family='monospace')
+    
+    plt.tight_layout()
+    plt.show()
+
 def plot_advanced_sentiment_features(daily_sentiment_df: pd.DataFrame):
     """
-    Plots advanced sentiment features (Momentum, Volatility, MA) for all companies.
+    Plots advanced sentiment signal quality (Signal Continuity) for all companies 
+    in a 2x2 grid to show how data gaps are handled.
     
     Args:
         daily_sentiment_df (pd.DataFrame): DataFrame with sentiment features.
@@ -329,34 +446,116 @@ def plot_advanced_sentiment_features(daily_sentiment_df: pd.DataFrame):
         print("No data to plot.")
         return
         
-    companies = daily_sentiment_df['company'].unique()
+    companies = ['Apple', 'Amazon', 'Google', 'Microsoft']
+    available = [c for c in companies if c in daily_sentiment_df['company'].unique()]
     
-    for company in companies:
-        subset = daily_sentiment_df[daily_sentiment_df['company'] == company].iloc[-100:] # Last 100 days
-        if subset.empty:
+    if not available:
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharex=True, sharey=True)
+    axes = axes.flatten()
+    
+    for i, company in enumerate(available):
+        plot_sentiment_signal_quality(daily_sentiment_df, company, ax=axes[i])
+        
+    fig.suptitle("Feature Engineering: Signal Continuity (Filling Missing Days with Decay)", 
+                 fontsize=16, fontweight='bold', y=0.95)
+    
+    # Global Legend (fake handle)
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], color='black', lw=2, alpha=0.6, label='Decayed Signal (Continuous)'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='black', markersize=8, label='Raw News Days')
+    ]
+    fig.legend(handles=legend_elements, loc='lower center', ncol=2, bbox_to_anchor=(0.5, 0.02))
+    
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+    plt.show()
+
+def plot_performance_comparison(results_df: pd.DataFrame, metric: str = "MSE"):
+    """
+    Plots a bar chart comparing model performance across different metrics.
+    
+    Args:
+        results_df (pd.DataFrame): DataFrame with index as Model Name and columns as Metrics.
+        metric (str): The specific metric to sort and highlight.
+    """
+    if results_df.empty:
+        return
+        
+    plt.figure(figsize=(10, 6))
+    
+    # Sort by metric
+    sorted_df = results_df.sort_values(metric, ascending=(metric not in ['R2', 'Sharpe', 'Directional Accuracy']))
+    
+    colors = ['#1f77b4' if 'LSTM' in idx else '#d62728' if 'Market' in idx or 'Baseline' in idx else 'gray' for idx in sorted_df.index]
+    
+    bars = plt.bar(sorted_df.index, sorted_df[metric], color=colors, alpha=0.8)
+    
+    plt.title(f"Model Comparison: {metric}", fontweight='bold', fontsize=14)
+    plt.ylabel(metric)
+    plt.xlabel("Model strategy")
+    plt.xticks(rotation=45)
+    plt.grid(axis='y', alpha=0.3)
+    
+    # Add labels
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height,
+                 f'{height:.4f}',
+                 ha='center', va='bottom')
+                 
+    plt.tight_layout()
+    plt.show()
+
+def plot_cumulative_returns(y_true: pd.Series, model_predictions: dict):
+    """
+    Plots the cumulative equity curve of trading strategies based on model predictions.
+    strategy_return = sign(pred) * y_true
+    
+    Args:
+        y_true (pd.Series): Actual returns.
+        model_predictions (dict): Dictionary {ModelName: y_pred_series}.
+    """
+    plt.figure(figsize=(12, 6))
+    
+    # Cumulative Product of (1 + r) is strictly correct for prices, but for simple log returns summing is approx ok.
+    # Let's use cumulative sum of log returns -> Log Price Level. 
+    # Or exp(cumsum) -> Normalized Price.
+    
+    # 1. Market (Buy & Hold)
+    market_curve = np.exp(y_true.cumsum())
+    plt.plot(market_curve.index, market_curve, label='Market (Buy & Hold)', color='black', linewidth=2, linestyle='--')
+    
+    for name, y_pred in model_predictions.items():
+        # Align
+        common_idx = y_true.index.intersection(y_pred.index)
+        if common_idx.empty:
             continue
             
-        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+        truth = y_true.loc[common_idx]
+        pred = y_pred.loc[common_idx]
         
-        # Plot 1: Sentiment vs MA
-        axes[0].plot(subset['date'], subset['sentiment_mean'], label='Daily Sentiment', alpha=0.4, color='gray')
-        axes[0].plot(subset['date'], subset['sentiment_ma_7d'], label='7-Day MA', linewidth=2, color='#1f77b4')
-        axes[0].set_title(f"{company}: Sentiment Trend (7-Day MA)", fontweight='bold')
-        axes[0].legend(loc='upper left')
-        axes[0].grid(True, alpha=0.3)
+        # Strategy: Buy if pred > 0, Sell if pred < 0.
+        # Note: Shorting allowed? If yes, sign(pred)*truth. 
+        # If Long-Only: (pred>0) * truth.
+        # Let's assume Long-Short for "Signal Strength" demonstration, or standard "Directional Strategy".
         
-        # Plot 2: Volatility
-        axes[1].plot(subset['date'], subset['sentiment_volatility_7d'], color='#ff7f0e', label='7-Day Volatility')
-        axes[1].set_title(f"{company}: Sentiment Volatility (Risk)", fontweight='bold')
-        axes[1].legend(loc='upper left')
-        axes[1].grid(True, alpha=0.3)
+        strat_returns = np.sign(pred) * truth
+        strat_curve = np.exp(strat_returns.cumsum())
         
-        # Plot 3: Momentum & Market Context
-        axes[2].bar(subset['date'], subset['sentiment_momentum_3d'], color='purple', alpha=0.3, label='3-Day Momentum')
-        axes[2].plot(subset['date'], subset['market_sentiment'], label='Market Context (Peers)', color='green', linestyle='--')
-        axes[2].set_title(f"{company}: Momentum & Market Context", fontweight='bold')
-        axes[2].legend(loc='upper left')
-        axes[2].grid(True, alpha=0.3)
+        # Color logic
+        color = None
+        if 'LSTM' in name: color = '#1f77b4' # Blue
+        elif 'Baseline' in name: color = 'gray'
         
-        plt.tight_layout()
-        plt.show()
+        plt.plot(common_idx, strat_curve, label=f'{name} Strategy', linewidth = 2 if 'LSTM' in name else 1.5, color=color)
+        
+    plt.title("Equity Curve Comparison (Cumulative Returns)", fontweight='bold')
+    plt.xlabel("Date")
+    plt.ylabel("Normalized Wealth (Start=1.0)")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+

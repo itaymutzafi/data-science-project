@@ -1,19 +1,115 @@
 """Trainer module.
 
-Contains model training utilities.
+Contains model training utilities including Walk-Forward Validation.
 """
 
-from typing import Any
+from typing import Any, Tuple, Dict, List
 import pandas as pd
-
-def train_model(model: Any, X_train: pd.DataFrame, y_train: pd.Series) -> Any:
-    """
-    Trains a model.
-    """
-    raise NotImplementedError("train_model not implemented yet.")
+import numpy as np
+from sklearn.model_selection import TimeSeriesSplit
+from src.evaluation.metrics import evaluate_regression
 
 def time_series_split(data: pd.DataFrame, n_splits: int = 5):
     """
     Performs time series split.
+    Wrapper for sklearn TimeSeriesSplit.
     """
-    raise NotImplementedError("time_series_split not implemented yet.")
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    return tscv.split(data)
+
+def train_and_evaluate(
+    model: Any, 
+    X: pd.DataFrame, 
+    y: pd.Series, 
+    n_splits: int = 5
+) -> Tuple[Dict[str, float], pd.DataFrame]:
+    """
+    Runs Walk-Forward Validation (Expanding Window) on the model.
+    
+    1. Splits time series into k folds (preserving order).
+    2. For each fold:
+       - Train on indices [0 ... train_end]
+       - Predict on indices [train_end+1 ... test_end]
+    3. Aggregates predictions to form a continuous "out-of-sample" series.
+    4. Computes metrics on the full out-of-sample series.
+    
+    Args:
+        model: Model instance (must have fit and predict methods).
+        X: Feature DataFrame.
+        y: Target Series.
+        n_splits: Number of Walk-Forward splits.
+        
+    Returns:
+        metrics: Dictionary of aggregated performance metrics.
+        predictions: DataFrame containing Actual vs Predicted for the test period.
+    """
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    
+    all_y_true = []
+    all_y_pred = []
+    
+    print(f"Starting Walk-Forward Validation ({n_splits} splits)...")
+    
+    fold = 1
+    for train_index, test_index in tscv.split(X):
+        # 1. Split Data
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+        
+        # 2. Train (Fit)
+        # Clone model or re-init? 
+        # Ideally we should re-initialize to avoid data leakage from previous folds if the model keeps state.
+        # But simple sklearn models usually reset on fit().
+        # Our LSTM wrapper resets weights? No, __init__ sets them. fit() just runs train loop.
+        # We should logically create a new instance or reset weights.
+        # For simplicity here, assuming model.fit() retrains from scratch or essentially adapts.
+        # IF we want strict retraining, we'd need a model factory.
+        # Let's assume fit() is sufficient or we accept "online learning" if weights persist (which is also valid for TS).
+        # Actually for strict Evaluation, complete retrain is cleaner.
+        
+        # Hack for PyTorch wrappers that don't reset:
+        if hasattr(model, 'reset_weights'):
+            model.reset_weights() # Theoretically
+        
+        model.fit(X_train, y_train)
+        
+        # 3. Predict
+        preds = model.predict(X_test)
+        
+        # Handle NA from LSTM sequences or lags
+        # Align indices
+        valid_idx = preds.dropna().index.intersection(y_test.index)
+        
+        if len(valid_idx) == 0:
+            print(f"Fold {fold}: No valid predictions (likely sequence length issue). Skipping.")
+            continue
+            
+        fold_preds = preds.loc[valid_idx]
+        fold_true = y_test.loc[valid_idx]
+        
+        all_y_true.append(fold_true)
+        all_y_pred.append(fold_preds)
+        
+        # Optional: Print fold metrics
+        # fold_metrics = evaluate_regression(fold_true, fold_preds)
+        # print(f"Fold {fold}: MSE={fold_metrics['MSE']:.6f}")
+        
+        fold += 1
+        
+    # 4. Aggregate
+    if not all_y_true:
+        print("No predictions generated.")
+        return {}, pd.DataFrame()
+        
+    full_y_true = pd.concat(all_y_true)
+    full_y_pred = pd.concat(all_y_pred)
+    
+    # Calculate global metrics on concatenated OOS predictions
+    metrics = evaluate_regression(full_y_true, full_y_pred)
+    
+    results_df = pd.DataFrame({
+        'Actual': full_y_true,
+        'Predicted': full_y_pred
+    })
+    
+    return metrics, results_df

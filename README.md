@@ -1,79 +1,97 @@
-# Stock Market Prediction Pipeline (AAPL)
+# Advanced Stock Market Prediction Pipeline
 
-**Workshop in Data Science — Team 003**  
-_(Itay, Moran, Shaked)_
+**Workshop in Data Science — Team 003**
+*Authors: Itay, Moran, Shaked*
 
-This repository contains an end-to-end machine learning pipeline for predicting short-term stock movements (Log Returns) of Apple Inc. (AAPL). The project is designed with a "Notebook as a Report" philosophy, where the main narrative lives in `Final_Project_Report.ipynb` while the heavy lifting is handled by a structured Python package (`src/`).
+## Overview
+This repository contains an end-to-end machine learning pipeline designed to predict short-term stock movements (Logarithmic Returns) for major technology companies: Apple (AAPL), Amazon (AMZN), Google (GOOG), and Microsoft (MSFT). The project adopts a "Notebook as a Report" methodology, centralizing the narrative, analysis, and empirical results within `Final_Project_Report.ipynb`, while delegating data processing and model logic to a structured Python package (`src/`).
 
----
-
-## 📂 Repository Structure
-
-The project follows a domain-driven hybrid architecture:
+## Repository Structure
+The project follows a domain-driven hybrid architecture, distinguishing between narrative documentation and core logic.
 
 ```text
 .
-├── Final_Project_Report.ipynb  # Main project report (The "Story")
+├── Final_Project_Report.ipynb  # Primary project report containing analysis and results
 ├── README.md                   # Project documentation
 ├── environment.yml             # Conda environment specification
 ├── requirements.txt            # Pip requirements
-├── data/                       # Raw and processed datasets
-├── literature/                 # Project literature and materials
-├── src/                        # Source code (The "Engine")
+├── data/                       # Directory for raw and processed datasets
+├── literature/                 # Academic references and literature
+├── src/                        # Source code package
 │   ├── config.py               # Configuration settings
-│   ├── data/                   # Data ingestion and loading
-│   │   └── loader.py
-│   ├── features/               # Feature engineering
-│   │   ├── indicators.py       # Technical indicators (RSI, MA)
-│   │   └── preprocessing.py    # Transformers (Log Returns)
-│   ├── models/                 # Model definitions
-│   │   ├── baselines.py        # Baseline models (Naive, CAPM)
-│   │   └── training.py         # Training logic
-│   ├── evaluation/             # Analysis tools
-│   │   ├── analysis.py         # Statistical tests
-│   │   ├── metrics.py          # Performance metrics
-│   │   └── plots.py            # Visualization utilities
+│   ├── data/                   # Data ingestion, loading, and schema validation
+│   ├── features/               # Feature engineering (Technical indicators, Sentiment analysis)
+│   ├── models/                 # Model definitions (Baselines, Machine Learning models)
+│   ├── evaluation/             # Statistical analysis, performance metrics, and visualization
 │   └── utils/                  # Utility functions
-└── tests/                      # Unit tests
+└── tests/                      # Unit tests for pipeline assurance
 ```
 
----
+## System Requirements
+- Python 3.8 or higher
+- Jupyter Lab or Jupyter Notebook
 
-## 🚀 Getting Started
+## Installation Instructions
 
-### Prerequisites
-
-- Python 3.8+
-- Jupyter Lab or Notebook
-
-### Installation
-
-1.  **Install Dependencies:**
+1.  Clone the repository to a local machine.
+2.  Install the required Python dependencies:
     ```bash
     pip install -r requirements.txt
     ```
 
-2.  **Run the Report:**
-    Open `Final_Project_Report.ipynb` in Jupyter Lab/Notebook and execute all cells.
-    The notebook is self-contained and will fetch data automatically using the `src` package.
+## Data Setup
 
-3.  **Run Tests:**
-    To verify the integrity of the pipeline, run the test suite:
-    ```bash
-    pytest tests/
-    ```
+**Important**: The project relies on large historical news datasets for sentiment analysis. These files exceed standard version control limits and are **not** included in the repository.
+
+1.  **Download Data**: Obtain the news datasets (e.g., `apple_news_last_15y.csv`) from the provided source (or shared drive).
+2.  **Manual Placement**: Move these CSV files into the `data/raw/` directory.
+    -   Target Path: `data/raw/apple_news_last_15y.csv`
+    -   *Note: If these files are missing, the feature engineering pipeline may fail or skip sentiment generation.*
+
+## Usage
+
+### Running the Report
+Open `Final_Project_Report.ipynb` using a Jupyter environment. The notebook is designed to be self-contained and sequentially executable. The execution flow includes:
+1.  **Data Acquisition**: Automatic fetching of historical stock data via the `yfinance` API.
+2.  **Data Processing**: Loading and preprocessing of alternative data sources, specifically news sentiment.
+3.  **Feature Generation**: Computation of technical indicators and time-decayed sentiment scores.
+4.  **Model Training**: Execution of the training pipeline using a Walk-Forward Validation protocol.
+5.  **Evaluation**: Generation of performance metrics and comparative visualizations for all analyzed assets.
+
+### Testing
+To validate the integrity of the project's source code, execute the test suite:
+```bash
+pytest tests/
+```
+
+## Methodology
+
+### Problem Definition
+The objective is the prediction of **daily Logarithmic Returns** ($Y_{t+1}$), rather than raw prices, to satisfy the stationarity condition required for robust statistical modeling.
+
+### Data Acquisition
+-   **Market Data**: OHLCV (Open, High, Low, Close, Volume) daily data.
+-   **Alternative Data**: Aggregated sentiment analysis derived from financial news headlines.
+-   **Macroeconomic Indicators**: Broader market indices for contextual analysis.
+
+### Feature Engineering
+The feature set comprises:
+-   **Technical Indicators**: Relative Strength Index (RSI), Bollinger Bands, Moving Average Convergence Divergence (MACD), and Moving Averages.
+-   **Sentiment Metrics**: Quantitative sentiment scores incorporating time-decay functions to model the persistence of information.
+-   **Temporal Features**: Lagged variables to capture time-series dependencies.
+
+### Validation Strategy
+Model performance is assessed using **Strict Walk-Forward Validation**. This method trains models strictly on historical data and tests on subsequent out-of-sample periods, effectively eliminating look-ahead bias and providing a realistic simulation of trading performance.
+
+### Software Architecture
+-   **Object-Oriented Components**: Classes are utilized for stateful operations, including Scikit-Learn compatible Transformers and Model wrappers.
+-   **Functional Components**: Stateless functions are employed for data loading, transformation, and metric calculation to ensure side-effect-free execution.
+
+## Evaluation Metrics
+Models are optimized and evaluated based on:
+-   **Mean Squared Error (MSE)**: To measure the statistical goodness-of-fit.
+-   **Sharpe Ratio**: To evaluate risk-adjusted returns of the predictive strategy.
+-   **Directional Accuracy**: To determine the classification efficacy for directional price movements.
 
 ---
-
-## 🛠️ Methodology
-
-### 1. Problem Formulation
-We predict **Logarithmic Returns** ($Y_t$) instead of raw prices ($P_t$) to ensure stationarity, a critical assumption for many ML models.
-
-### 2. Architecture
-We use a **Hybrid Architecture**:
-- **Object-Oriented (Classes):** For stateful components like Transformers (e.g., `LogReturnTransformer`) and Models. This allows integration with Scikit-Learn pipelines.
-- **Functional:** For stateless utilities like data loading and metric calculation.
-
-### 3. Evaluation
-We optimize for **MSE** (Statistical fit) but evaluate success using **Sharpe Ratio** (Financial risk-adjusted return) and **Directional Accuracy** (Trading utility).
+*Submitted as partial fulfillment of the requirements for the Workshop in Data Science, Tel Aviv University.*
