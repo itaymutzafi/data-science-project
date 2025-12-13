@@ -35,9 +35,7 @@ def apply_exponential_decay(
     """
     df = df.copy()
     
-    # Iterate to apply decay (easiest way to handle sequential dependence)
-    # Vectorized approaches exist but this is clearer for simple recursive decay
-    # Optimization: Use grouped apply
+    # Iterate to apply decay (simple recursive decay)
     
     sentiment_values = df[sentiment_col].values
     has_news = df['news_count'].values > 0
@@ -79,12 +77,7 @@ def calculate_market_context(
     # Merge back
     df = df.merge(daily_market, on=date_col, how='left')
     
-    # For each row, the market context is (Sum_all - Self) / (N-1)
-    # But approximate with 'market_mean' is usually sufficient if N is large.
-    # For N=4 (AAPL, MSFT, GOOG, AMZN), explicit leave-one-out is better.
-    
-    # Leave-one-out calculation
-    # Sum of all sentiments per day
+    # Leave-one-out calculation: (Sum_all - Self) / (N-1)
     daily_sum = df.groupby(date_col)[sentiment_col].sum()
     daily_count = df.groupby(date_col)[sentiment_col].count()
     
@@ -345,11 +338,7 @@ def integrate_sentiment_data(
         # 2. Aggregate
         daily_sentiment = analyzer.aggregate_daily_sentiment(scored_news, date_col=date_col)
     
-    # 3. Process Time Series (Decay + Market Context) instead of just Fillna
-    # This replaces the fill_missing_sentiment_dates logic if it was called before, but here we do it integrally.
-    # Ideally, integrate_sentiment_data should receive raw-ish data and do the processing.
-    # However, if 'news_data' is just one company, market context might be partial.
-    # Assuming 'news_data' contains all relevant companies.
+    # 3. Process Time Series (Decay + Market Context)
     
     logger.info("Processing sentiment time series (Exponential Decay + Market Context)...")
     
@@ -575,8 +564,6 @@ def generate_daily_sentiment_features(
             mask = df['final_text'].str.len() <= 3
             # Extract first line/sentence efficiently
             extracted = df.loc[mask, col].fillna("").astype(str).str.split('\n').str[0].str.strip()
-            # If still empty/short, try split by dot? 
-            # (Note: split by dot needs regex to be robust, usually split('\n')[0] is main headline fallback)
             df.loc[mask, 'final_text'] = extracted
 
     # Filter out empty text

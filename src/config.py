@@ -35,4 +35,4 @@ AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
 RAW_NEWS_PATH = "data/raw/news_last_5y.csv"
 PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
 SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
-SAMPLES_PER_DAY = 5
+SAMPLES_PER_DAY = 500
