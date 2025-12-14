@@ -17,6 +17,7 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     """
     Fetches raw OHLCV data for initial research and stationarity tests.
     Implements local caching to avoid repeated API calls.
+    Only fetches new data if the requested date range differs from cached data.
     """
     # Define cache path
     ticker_name = ticker.ticker
@@ -26,15 +27,47 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     
     # Check cache
     if cache_path.exists():
-        print(f"Loading {ticker_name} data from cache... - don't generate a new df!!!")
         df = pd.read_parquet(cache_path)
         # Ensure index is timezone-naive for consistency
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
-        return df
         
-    # Download if not in cache
-    print(f"Fetching {period} of data for {ticker_name} from yfinance...")
+        # Check if cached data covers the requested date range
+        # Note: Stock data doesn't include weekends/holidays, so we check if cached data
+        # has entries that cover the requested period
+        cached_start = df.index.min().date()
+        cached_end = df.index.max().date()
+        
+        # Allow tolerance for weekends/holidays (up to 5 days difference)
+        # Stock markets are typically closed on weekends, so a few days difference is normal
+        tolerance_days = 5
+        
+        # Check if cached data covers the requested range:
+        # 1. Cached start should be before or close to requested start (within tolerance)
+        #    If cached_start is after start_time, allow up to tolerance_days difference
+        # 2. Cached end should be after or close to requested end (within tolerance)
+        #    If cached_end is before end_time, allow up to tolerance_days difference
+        start_diff = (start_time - cached_start).days
+        end_diff = (end_time - cached_end).days
+        
+        # Start is covered if cached_start <= start_time OR if the difference is small (within tolerance)
+        start_covered = abs(start_diff) <= tolerance_days
+        # End is covered if cached_end >= end_time OR if the difference is small (within tolerance)
+        end_covered = abs(end_diff) <= tolerance_days
+        
+        if start_covered and end_covered:
+            print(f"It didn't fetch nothing new - {ticker_name} data already covers requested range ({start_time} to {end_time})")
+            return df
+        else:
+            # Need to fetch new data - calculate years
+            years_diff = (end_time - start_time).days / 365.25
+            print(f"Cache doesn't cover requested range. Fetching {years_diff:.1f} year(s) of data for {ticker_name} from yfinance...")
+    else:
+        # No cache exists - calculate years
+        years_diff = (end_time - start_time).days / 365.25
+        print(f"Fetching {years_diff:.1f} year(s) of data for {ticker_name} from yfinance...")
+        
+    # Download data
     df = ticker.history(start = start_time, end = end_time)
     
     if df.empty:
@@ -46,7 +79,7 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     # Save to cache
     cache_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path)
-    print(f"Saved {ticker} data to {cache_path}")
+    print(f"Saved {ticker_name} data to {cache_path}")
     
     return df
 
