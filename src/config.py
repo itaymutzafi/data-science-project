@@ -4,6 +4,8 @@ This module defines global constants and project paths.
 """
 
 from pathlib import Path
+from datetime import date
+from calendar import month_name, day_name
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,11 +19,10 @@ TICKER_TO_COMPANY_MAP = {
     "AAPL": "Apple",
     "MSFT": "Microsoft",
     "AMZN": "Amazon",
-    "GOOGL": "Google",
     "GOOG": "Google",
-    "NVDA": "Nvidia",
-    "TSLA": "Tesla"
 }
+
+TICKERS = list(TICKER_TO_COMPANY_MAP.keys())
 
 # Visualization Colors
 COMPANY_COLORS = {
@@ -44,8 +45,10 @@ LOOKBACK_WINDOW = 30
 TEST_SIZE = 0.2
 
 # Date Range (None implies dynamic fetching or full available history)
-START_DATE = None
-END_DATE = None
+DAYNAMES = list(day_name)
+MONTHNAMES = list(month_name)[1:]
+START_DATE = date(2020, 1, 1)
+END_DATE = date(2025, 12, 3)
 
 SEED = 42
 
@@ -62,4 +65,6 @@ AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
 RAW_NEWS_PATH = "data/raw/news_last_5y.csv"
 PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
 SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
-SAMPLES_PER_DAY = 5
+SAMPLES_PER_DAY = 1
+
+

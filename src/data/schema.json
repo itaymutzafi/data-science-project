@@ -7,10 +7,7 @@
       "High":          { "type": "float" },
       "Low":           { "type": "float" },
       "Close":         { "type": "float" },
-      "Volume":        { "type": "int", "minimum": 0 },
-      "Return":        { "type": "float"},
-      "Log_Return":    { "type": "float"},
-  
+      "Volume":        { "type": "int", "minimum": 0 }, 
       "Dividends":     { "type": ["float", "null"] },
       "Stock Splits":  { "type": ["float", "null"] }
     },
@@ -20,5 +17,7 @@
       "High",
       "Low",
       "Close",
-      "Volume"]
+      "Volume",
+      "Dividends",
+      "Stock Splits"]
   }

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Tuple, Dict
 from src.utils import statistic_tests as st
+from src.config import COMPANY_COLORS
 
 def run_eda(
     df: pd.DataFrame,
@@ -193,7 +194,6 @@ def run_eda_comparative(
     daynames: List[str],
     monthnames: List[str],
     features_to_analyze: List[str] = None,
-    color_map: Dict[str, str] = None
 ) -> None:
     """
     Comparative EDA pipeline for multiple stock DataFrames.
@@ -204,8 +204,6 @@ def run_eda_comparative(
         daynames: List of day names (e.g., list(day_name))
         monthnames: List of month names (e.g., list(month_name)[1:])
         features_to_analyze: List of column names to analyze (e.g., ['Return', 'Volume'])
-        color_map: Optional dictionary mapping company names to colors (e.g., {"Apple": "green", "Amazon": "yellow"})
-                   If not provided, uses default matplotlib color scheme
     """
     if features_to_analyze is None:
         features_to_analyze = ['Return', 'Volume', 'Close']
@@ -219,17 +217,6 @@ def run_eda_comparative(
     
     company_names = list(dfs.keys())
     
-    # Use custom color_map if provided, otherwise use default
-    if color_map is None:
-        colors = plt.cm.tab10(np.linspace(0, 1, len(company_names)))
-        color_map = {name: colors[i] for i, name in enumerate(company_names)}
-    else:
-        # Ensure all companies have colors, use default for missing ones
-        default_colors = plt.cm.tab10(np.linspace(0, 1, len(company_names)))
-        for i, name in enumerate(company_names):
-            if name not in color_map:
-                color_map[name] = default_colors[i]
-    
     print(f"\n{'='*60}")
     print(f"Comparative EDA for {', '.join(company_names)}")
     print(f"{'='*60}\n")
@@ -239,7 +226,7 @@ def run_eda_comparative(
     plt.figure(figsize=(14, 6))
     for name, df in dfs.items():
         if 'Close' in df.columns:
-            plt.plot(df.index, df['Close'], label=f"{name} Close", color=color_map[name], alpha=0.8, linewidth=1.5)
+            plt.plot(df.index, df['Close'], label=f"{name} Close", color=COMPANY_COLORS[name], alpha=0.8, linewidth=1.5)
     plt.title("Close Price Comparison Over Time")
     plt.ylabel("Price ($)")
     plt.xlabel("Year")
@@ -253,7 +240,7 @@ def run_eda_comparative(
     plt.figure(figsize=(14, 6))
     for name, df in dfs.items():
         if 'Volume' in df.columns:
-            plt.plot(df.index, df['Volume'], label=f"{name}", color=color_map[name], alpha=0.7, linewidth=1)
+            plt.plot(df.index, df['Volume'], label=f"{name}", color=COMPANY_COLORS[name], alpha=0.7, linewidth=1)
     plt.title("Volume Comparison Over Time")
     plt.ylabel("Volume")
     plt.xlabel("Year")
@@ -274,7 +261,7 @@ def run_eda_comparative(
             daily_ret = df.groupby('Day')['Return'].mean()
             daily_ret = daily_ret.reindex(daynames)
             offset = width * multiplier
-            plt.bar(x + offset, daily_ret.values, width, label=name, color=color_map[name], alpha=0.8)
+            plt.bar(x + offset, daily_ret.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
             multiplier += 1
         
         plt.xlabel('Day of Week')
@@ -324,7 +311,7 @@ def run_eda_comparative(
         
         bp = ax.boxplot(data_to_plot, positions=positions, widths=0.6, patch_artist=True)
         for patch, name in zip(bp['boxes'], labels_to_plot):
-            patch.set_facecolor(color_map[name])
+            patch.set_facecolor(COMPANY_COLORS[name])
             patch.set_alpha(0.7)
         
         ax.set_xticks([i * (len(company_names) + 1) + (len(company_names) - 1) / 2 for i in range(len(daynames))])
@@ -335,7 +322,7 @@ def run_eda_comparative(
         
         # Create custom legend
         from matplotlib.patches import Patch
-        legend_elements = [Patch(facecolor=color_map[name], alpha=0.7, label=name) for name in company_names]
+        legend_elements = [Patch(facecolor=COMPANY_COLORS[name], alpha=0.7, label=name) for name in company_names]
         ax.legend(handles=legend_elements, loc='upper right')
         plt.tight_layout()
         plt.show()
@@ -352,7 +339,7 @@ def run_eda_comparative(
             monthly_ret = df.groupby('Month')['Return'].mean()
             monthly_ret = monthly_ret.reindex(range(1, 13))
             offset = width * multiplier
-            plt.bar(x + offset, monthly_ret.values, width, label=name, color=color_map[name], alpha=0.8)
+            plt.bar(x + offset, monthly_ret.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
             multiplier += 1
         
         plt.xlabel('Month')
@@ -375,7 +362,7 @@ def run_eda_comparative(
         daily_vol = df.groupby('Day')['Volume'].mean()
         daily_vol = daily_vol.reindex(daynames)
         offset = width * multiplier
-        plt.bar(x + offset, daily_vol.values, width, label=name, color=color_map[name], alpha=0.8)
+        plt.bar(x + offset, daily_vol.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
         multiplier += 1
     
     plt.xlabel('Day of Week')
@@ -398,7 +385,7 @@ def run_eda_comparative(
         monthly_vol = df.groupby('Month')['Volume'].mean()
         monthly_vol = monthly_vol.reindex(range(1, 13))
         offset = width * multiplier
-        plt.bar(x + offset, monthly_vol.values, width, label=name, color=color_map[name], alpha=0.8)
+        plt.bar(x + offset, monthly_vol.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
         multiplier += 1
     
     plt.xlabel('Month')
@@ -420,7 +407,7 @@ def run_eda_comparative(
         plt.figure(figsize=(14, 6))
         for name, df in dfs.items():
             if 'Vol20' in df.columns:
-                plt.plot(df.index, df['Vol20'], label=f"{name} (20-day)", color=color_map[name], alpha=0.8, linewidth=1.5)
+                plt.plot(df.index, df['Vol20'], label=f"{name} (20-day)", color=COMPANY_COLORS[name], alpha=0.8, linewidth=1.5)
         plt.title("Rolling Volatility (20-day) - Comparison")
         plt.ylabel("Volatility (Std Dev)")
         plt.xlabel("Year")
@@ -441,7 +428,7 @@ def run_eda_comparative(
                 daily_vol20 = df.groupby('Day')['Vol20'].mean()
                 daily_vol20 = daily_vol20.reindex(daynames)
                 offset = width * multiplier
-                plt.bar(x + offset, daily_vol20.values, width, label=name, color=color_map[name], alpha=0.8)
+                plt.bar(x + offset, daily_vol20.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
                 multiplier += 1
         
         plt.xlabel('Day of Week')
@@ -465,7 +452,7 @@ def run_eda_comparative(
                 monthly_vol20 = df.groupby('Month')['Vol20'].mean()
                 monthly_vol20 = monthly_vol20.reindex(range(1, 13))
                 offset = width * multiplier
-                plt.bar(x + offset, monthly_vol20.values, width, label=name, color=color_map[name], alpha=0.8)
+                plt.bar(x + offset, monthly_vol20.values, width, label=name, color=COMPANY_COLORS[name], alpha=0.8)
                 multiplier += 1
         
         plt.xlabel('Month')
@@ -486,9 +473,9 @@ def run_eda_comparative(
         
         plt.figure(figsize=(14, 6))
         for name, df in dfs.items():
-            plt.plot(df.index, df['Close'], label=f"{name} Close", color=color_map[name], alpha=0.5, linewidth=1)
+            plt.plot(df.index, df['Close'], label=f"{name} Close", color=COMPANY_COLORS[name], alpha=0.5, linewidth=1)
             if 'MA20' in df.columns:
-                plt.plot(df.index, df['MA20'], label=f"{name} MA20", color=color_map[name], linestyle='--', alpha=0.7, linewidth=1)
+                plt.plot(df.index, df['MA20'], label=f"{name} MA20", color=COMPANY_COLORS[name], linestyle='--', alpha=0.7, linewidth=1)
         plt.title("Close Price and 20-day Moving Average - Comparison")
         plt.ylabel("Price ($)")
         plt.xlabel("Year")
