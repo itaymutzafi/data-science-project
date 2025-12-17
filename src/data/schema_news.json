@@ -1,0 +1,77 @@
+{
+  "title": "News Dataset Schema",
+  "type": "object",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "company": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publication": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dataset_source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "author": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "text_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "time_precision": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dataset": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tz_hint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "url": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uri"
+    }
+  },
+  "required": [
+    "date",
+    "company",
+    "text"
+  ]
+}

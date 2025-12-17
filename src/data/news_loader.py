@@ -3,7 +3,6 @@
 This module handles data fetching from Hugging Face dataset financial-news-multisource
 """
 
-import csv
 from datasets import load_dataset
 from datetime import datetime, date
 from huggingface_hub import login
@@ -12,22 +11,20 @@ import pandas as pd
 from typing import Any, Optional
 import feedparser
 import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
+from src.config import START_DATE, END_DATE, TICKER_TO_COMPANY_MAP
 
 
-# Access Token since the dataset is protected
+# Access Token since the dataset is protected, insert here or in .env
 # login(os.getenv("HF_TOKEN"))
 
 YEARS_BACK = 5
-OUTPUT_CSV = f"news_last_{YEARS_BACK}y.csv"
-OUTPUT_XLSX = f"news_last_{YEARS_BACK}y.xlsx"
+FOLDER = "data/raw/"
+OUTPUT_FILE = f"{FOLDER}news_last_{YEARS_BACK}y.parquet"
+OUTPUT_XLSX = f"{FOLDER}news_last_{YEARS_BACK}y.xlsx"
 DATASET = "Brianferrell787/financial-news-multisource"
-
-APPLE_KEYWORDS = ["apple", "aapl"]
-MICROSOFT_KEYWORDS = ["microsoft", "MSFT"]
-AMAZON_KEYWORDS = ["amazon", "AMZN"]
-GOOGLE_KEYWORDS = ["google", "GOOGL"]
-
-KEYWORDS = APPLE_KEYWORDS + MICROSOFT_KEYWORDS + AMAZON_KEYWORDS + GOOGLE_KEYWORDS
 
 DATA_FILE_FORMAT = "data/{0}/*.parquet"
 DATA_FILES = [
@@ -61,14 +58,9 @@ def extract_date(row: dict[str, Any]) -> Optional[date]:
         return None
 
 def detect_company(text_lower: str) -> Optional[str]:
-    if any(k in text_lower for k in APPLE_KEYWORDS):
-        return "Apple"
-    if any(k in text_lower for k in MICROSOFT_KEYWORDS):
-        return "Microsoft"
-    if any(k in text_lower for k in AMAZON_KEYWORDS):
-        return "Amazon"
-    if any(k in text_lower for k in GOOGLE_KEYWORDS):
-        return "Google"
+    for ticker, company in TICKER_TO_COMPANY_MAP.items():
+        if any(k in text_lower for k in [ticker.lower(), company.lower()]):
+            return company
     return None
 
 def parse_extra_fields(row: dict[str, Any]) -> dict:
@@ -105,71 +97,52 @@ def parse_extra_fields(row: dict[str, Any]) -> dict:
     return result
 
 def main():
-    # Cutoff date (last N years)
-    today = date.today()
-    cutoff_date = pd.to_datetime(today.replace(year=today.year - YEARS_BACK))
-    print("Cutoff date:", cutoff_date)
-
     ds = load_dataset(DATASET, split="train", data_files=DATA_FILES, streaming=True)
 
-    min_date = None
-    max_date = None
-    apple_count = 0
     rows_scanned = 0
+    rows = []
 
-    with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=OUTPUT_FIELDS)
-        writer.writeheader()
+    for row in ds:
+        rows_scanned += 1
 
-        for row in ds:
-            rows_scanned += 1
+        d = extract_date(row)
+        if d is None or d < pd.Timestamp(START_DATE) or d > pd.Timestamp(END_DATE):
+            continue
 
-            d = extract_date(row)
-            if d is None or d < cutoff_date:
-                continue
+        text = (row.get("text") or "").strip()
+        if not text:
+            continue
 
-            text = (row.get("text") or "").strip()
-            if not text:
-                continue
+        company = detect_company(text.lower())
+        if company is None:
+            continue
 
-            company = detect_company(text.lower())
-            if company is None:
-                continue
+        extras = parse_extra_fields(row)
 
-            extras = parse_extra_fields(row)
+        out_row = {
+            "date": d.isoformat(),
+            "company": company,
+            "text": text,
+            "publication": extras["publication"],
+            "dataset_source": extras["dataset_source"],
+            "author": extras["author"],
+            "text_type": extras["text_type"],
+            "time_precision": extras["time_precision"],
+            "source": extras["source"],
+            "dataset": extras["dataset"],
+            "tz_hint": extras["tz_hint"],
+            "url": extras["url"],
+        }
+        rows.append(out_row)
 
-            out_row = {
-                "date": d.isoformat(),
-                "company": company,
-                "text": text,
-                "publication": extras["publication"],
-                "dataset_source": extras["dataset_source"],
-                "author": extras["author"],
-                "text_type": extras["text_type"],
-                "time_precision": extras["time_precision"],
-                "source": extras["source"],
-                "dataset": extras["dataset"],
-                "tz_hint": extras["tz_hint"],
-                "url": extras["url"],
-            }
-
-            writer.writerow(out_row)
-
-            apple_count += 1
-            if min_date is None or d < min_date:
-                min_date = d
-            if max_date is None or d > max_date:
-                max_date = d
+    news_df = pd.DataFrame(rows)
+    news_df.to_parquet(OUTPUT_FILE, index=False)
 
     print("\n--- SUMMARY ---")
     print("Total rows scanned:", rows_scanned)
-    print("Apple-related good rows saved:", apple_count)
-    print("Earliest Apple date (>= cutoff):", min_date)
-    print("Latest Apple date:", max_date)
+    print("Good rows saved:", len(rows))
 
-    # news_df = pd.read_csv(OUTPUT_CSV)
-
-    # Save also to excel
+    # Save also to excel with valid charachters
     # news_df["text"] = news_df["text"].astype(str).apply(
     #     lambda x: "".join(ch for ch in x if ord(ch) >= 32)
     # )
@@ -179,16 +152,19 @@ def main():
     # print(news_df["company"].value_counts())
 
     # for company, group in news_df.groupby("company"):
-    #     filename = f"news_{company.lower()}.csv"
-    #     group.to_csv(filename, index=False)
+    #     filename = f"{FOLDER}news_{company.lower()}.parquet"
+    #     group.to_parquet(filename, index=False)
     #     print(f"Saved {filename} with {len(group)} rows")
 
 if __name__ == "__main__":
     main()
 
 # Util
-def get_news_df_from_csv(csv_path):
-    df = pd.read_csv(csv_path, dtype=str)
+def get_news_df_from_file(file_path):
+    if file_path.endswith(".csv"):
+        df = pd.read_csv(file_path, dtype=str)
+    else:
+        df = pd.read_parquet(file_path)
     df["date"] = pd.to_datetime(df["date"])
     return df
 

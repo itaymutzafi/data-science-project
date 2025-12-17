@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import numpy as np
+from typing import Dict
+import pandas as pd
 import src.config as config
 
 def date_groupby_line_plot(df, yname, title):
@@ -41,7 +44,7 @@ def articles_over_time_by_dataset_plot(df, is_log, specific_years):
     plt.legend()
     plt.show()
 
-def volume_per_company_plot(df):
+def article_volume_per_company_plot(df):
     for company, group in df.groupby("company"):
         monthly_counts = (
             group.set_index("date")
