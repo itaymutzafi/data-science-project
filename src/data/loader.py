@@ -5,7 +5,7 @@ and local file I/O operations (CSV, Parquet).
 """
 from datetime import date
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Dict
 import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
@@ -156,11 +156,14 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
 
 
 def merge_df_by_date(
+    company_name: str,
     main_df: pd.DataFrame,
-    feature_dfs: Union[pd.DataFrame, List[pd.DataFrame]],
-    feature_names: Union[str, List[str]] = None,
+    other_companies: Dict,
     output_filename : str = "merged_df.parquet",
     how: str = "left") -> pd.DataFrame:
+    
+    feature_dfs = list(other_companies.values())
+    feature_names = list(other_companies.keys())
     
     # Normalize inputs: convert single DataFrame to list for uniform processing
     feature_dfs_list = [feature_dfs] if isinstance(feature_dfs, pd.DataFrame) else feature_dfs
@@ -197,7 +200,14 @@ def merge_df_by_date(
         
         feature_df_selected = feature_df[available_cols].copy()
         feature_df_selected.columns = [f"{feature_name} - {col}" for col in feature_df_selected.columns]
+
+        new_cols = [c for c in feature_df_selected.columns if c not in res_df.columns]
+        if not new_cols:
+            print(f"Skipping {feature_name}: columns already exist in main_df.")
+            continue
         
+        feature_df_selected = feature_df_selected[new_cols]
+
         # Merge with main dataframe
         res_df = res_df.join(feature_df_selected, how=how)
         print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
@@ -206,6 +216,7 @@ def merge_df_by_date(
     project_root = Path(__file__).resolve().parents[2]
     cache_dir = project_root / "data" / "raw"
     cache_dir.mkdir(parents=True, exist_ok=True)
+    output_filename = f"merged_{company_name}"
     cache_path = cache_dir / output_filename
     
     res_df.to_parquet(cache_path)

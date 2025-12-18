@@ -79,35 +79,7 @@ def table_visualize(df, groupby):
         .unstack(fill_value=0)
     )
 
-def plot_sec_fillings(reports_by_company):
-    import pandas as pd
-    import matplotlib.dates as mdates
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    
 
-    for i, ticker in enumerate(config.TICKERS):
-        filings_list = reports_by_company[ticker]          # your list of dicts
-        filings_df = pd.DataFrame(filings_list)
-
-        # Ensure datetime
-        filings_df['date'] = pd.to_datetime(filings_df['date'])
-
-        # Optional: use full company name + color from config
-        company_name = config.TICKER_TO_COMPANY_MAP.get(ticker, ticker)
-        color = config.COMPANY_COLORS.get(company_name, config.COMPANY_COLORS.get(ticker, None))
-
-        # One horizontal row of dots per company
-        ax.scatter(filings_df['date'], [i] * len(filings_df), 
-                label=company_name, color=color, alpha=0.7, s=20)
-
-    ax.set_yticks(range(len(config.TICKERS)))
-    ax.set_yticklabels([config.TICKER_TO_COMPANY_MAP[t] for t in config.TICKERS])
-    ax.set_xlabel("Filing Date")
-    ax.set_title("SEC Filing Dates per Company")
-
-    ax.xaxis.set_major_locator(mdates.YearLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
-    plt.grid(axis='x', alpha=0.3)
-    plt.tight_layout()
-    plt.legend()
-    plt.show()
+    
