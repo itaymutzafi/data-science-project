@@ -5,6 +5,7 @@ import numpy as np
 from src.models.baselines import NaiveBaseline, RandomBaseline, MarketBenchmark, CAPMBaseline
 from src.evaluation.metrics import evaluate_regression
 from IPython.display import display
+from typing import Dict
 
 def check_stationarity(series: pd.Series, name: str) -> None:
     """Performs the Augmented Dickey-Fuller (ADF) test for stationarity.
@@ -89,3 +90,29 @@ def run_baseline_analysis(y_train: pd.Series, y_test: pd.Series, X_test: pd.Data
     results_df = results_df[['MSE', 'Strategy Sharpe', 'Directional Accuracy']]
     print("--- Baseline Comparison ---")
     display(results_df)
+
+
+def get_permutation_importance(model, X_val: pd.DataFrame, y_val: pd.Series, n_repeats: int = 5) -> pd.Series:
+    """Compute permutation importance: MSE delta per feature when shuffled."""
+    pred_base = model.predict(X_val)
+    base_idx = y_val.index.intersection(pred_base.index)
+    base_mse = ((y_val.loc[base_idx] - pred_base.loc[base_idx]) ** 2).mean()
+    importances: Dict[str, float] = {}
+
+    for col in X_val.columns:
+        deltas = []
+        for _ in range(n_repeats):
+            shuffled = X_val.copy()
+            shuffled[col] = np.random.permutation(shuffled[col].values)
+            pred = model.predict(shuffled)
+            idx = y_val.index.intersection(pred.index)
+            mse = ((y_val.loc[idx] - pred.loc[idx]) ** 2).mean()
+            deltas.append(mse - base_mse)
+        importances[col] = float(np.mean(deltas))
+
+    return pd.Series(importances).sort_values(ascending=False)
+
+
+def permutation_importance(model, X_val: pd.DataFrame, y_val: pd.Series, n_repeats: int = 5) -> pd.Series:
+    """Alias for get_permutation_importance."""
+    return get_permutation_importance(model, X_val, y_val, n_repeats)

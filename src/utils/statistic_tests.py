@@ -72,7 +72,7 @@ def display_seasonality_results(results, alpha=0.05):
     # ===============================
     # 1. Headline summary
     # ===============================
-    print("📊 SEASONALITY TEST RESULTS")
+    print("SEASONALITY TEST RESULTS")
     print("=" * 40)
 
     baseline = results["baseline_day"]
@@ -81,7 +81,7 @@ def display_seasonality_results(results, alpha=0.05):
     print(f"Baseline period: {baseline}")
     print(
         "Seasonality detected: "
-        + ("YES ✅" if detected else "NO ❌")
+        + ("YES" if detected else "NO")
     )
     print()
 
@@ -98,7 +98,7 @@ def display_seasonality_results(results, alpha=0.05):
         ]
     })
 
-    print("🔎 Global significance tests")
+    print("Global significance tests")
     display(global_tests_df.style.format({"Value": "{:.4g}"}))
 
     # ===============================

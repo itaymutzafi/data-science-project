@@ -23,9 +23,9 @@ def test_exponential_decay():
     expected = np.array([1.0, 0.8, 0.64, 0.5, 0.4])
     
     if np.allclose(res, expected):
-        print("✅ Exponential Decay Test Passed")
+        print("PASS: Exponential Decay")
     else:
-        print("❌ Exponential Decay Test Failed")
+        print("FAIL: Exponential Decay")
         print(f"Expected: {expected}")
         print(f"Got: {res}")
 
@@ -46,9 +46,9 @@ def test_market_context():
     expected = np.array([0.0, 0.25, 0.75])
     
     if np.allclose(res, expected):
-        print("✅ Market Context Test Passed")
+        print("PASS: Market Context")
     else:
-        print("❌ Market Context Test Failed")
+        print("FAIL: Market Context")
 
 def test_advanced_features():
     print("\nTesting Advanced Features (Momentum, Volatility)...")
@@ -64,15 +64,15 @@ def test_advanced_features():
     
     # Allow small float diff
     if abs(mom[3] - expected_mom_day3) < 1e-9:
-        print("✅ Momentum Test Passed")
+        print("PASS: Momentum")
     else:
-        print(f"❌ Momentum Test Failed. Expected {expected_mom_day3}, got {mom[3]}")
+        print(f"FAIL: Momentum. Expected {expected_mom_day3}, got {mom[3]}")
         
     vol = df['sentiment_volatility_7d'].values
     if not np.isnan(vol[-1]):
-        print("✅ Volatility Test Passed (Output exists)")
+        print("PASS: Volatility output exists")
     else:
-        print("❌ Volatility Test Failed (NaN output)")
+        print("FAIL: Volatility output is NaN")
 
 if __name__ == "__main__":
     test_exponential_decay()

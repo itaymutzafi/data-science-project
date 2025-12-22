@@ -3,9 +3,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import Dict
+
 from src.config import COMPANY_COLORS, DAYNAMES, MONTHNAMES, TICKERS
+from src.evaluation.plots import set_style
 
 def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: str) -> None:
+    set_style()
     for name, df in dfs.items():
         if attr in df.columns:
             plt.plot(df.index, df[attr], label=f"{name} "+attr, color=COMPANY_COLORS[name], alpha=0.8, linewidth=1.5)
@@ -18,6 +21,7 @@ def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: st
     plt.show()
 
 def eda_volume_seasonality_plot(dfs: Dict[str, pd.DataFrame], time_presicion: str) -> None:
+    set_style()
     if time_presicion == 'Day':
         time_names = DAYNAMES
         time_range = time_names
@@ -46,6 +50,7 @@ def eda_volume_seasonality_plot(dfs: Dict[str, pd.DataFrame], time_presicion: st
     plt.show()
 
 def eda_correlation(ticker_name: str, df, corr_method: str='pearson') -> None:
+    set_style()
     corr_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'] 
     corr_cols = [c for c in corr_cols if c in df.columns] 
     if len(corr_cols) > 1: 

@@ -1,22 +1,20 @@
-"""
-Sentiment analysis module using FinBERT.
-"""
+"""Sentiment analysis module using FinBERT."""
 import logging
 import os
-from typing import Optional, Tuple, List
+from typing import List, Optional, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-
-
-from src.data.news_loader import get_google_news_titles
 from src.config import TICKER_TO_COMPANY_MAP
+from src.data.news_loader import get_google_news_titles
 from src.evaluation import plots
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+_sentiment_pipeline = None  # Lazy-loaded FinBERT pipeline
 
 def apply_exponential_decay(
     df: pd.DataFrame,
@@ -211,36 +209,57 @@ def process_sentiment_timeseries(
 class SentimentAnalyzer:
     """
     Analyzes financial news headlines using the FinBERT model.
+    The heavy model is loaded lazily to avoid import-time hangs.
     """
-    
-    def __init__(self, model_name: str = "ProsusAI/finbert", device: int = -1):
-        """
-        Initialize the FinBERT pipeline.
-        
-        Args:
-            model_name (str): Hugging Face model identifier.
-            device (int): Device to run on. -1 for CPU, 0+ for GPU. 
-                          If -1 is passed and MPS (Mac) is available, it will auto-use MPS.
-        """
-        logger.info(f"Loading sentiment analysis model: {model_name}...")
-        
-        # Lazy imports to prevent hang at module level
+
+    def __init__(self, model_name: str = "ProsusAI/finbert", device: str | int = "auto"):
+        self.model_name = model_name
+        self.requested_device = device
+        self.device = None
+
+    def _resolve_device(self):
+        """Resolve device lazily to avoid heavy init during imports."""
         import torch
+
+        if self.requested_device == "auto":
+            if torch.backends.mps.is_available():
+                return torch.device("mps")
+            if torch.cuda.is_available():
+                return torch.device("cuda")
+            return torch.device("cpu")
+        if isinstance(self.requested_device, str):
+            return torch.device(self.requested_device)
+        return self.requested_device
+
+    def _get_pipeline(self):
+        """Load FinBERT pipeline only when needed."""
+        global _sentiment_pipeline
+        if _sentiment_pipeline is not None:
+            return _sentiment_pipeline
+
+        print("⏳ Checking for FinBERT model...")
         from transformers import pipeline
 
-        # Auto-detect MPS if default device (-1) is detected and MPS is available on Mac
-        if device == -1 and torch.backends.mps.is_available():
-            logger.info("MPS (Metal Performance Shaders) support detected. Using GPU.")
-            self.device = "mps"
-        else:
-            self.device = device
-
+        device = self._resolve_device()
+        device_arg = device
         try:
-            self.pipeline = pipeline("sentiment-analysis", model=model_name, tokenizer=model_name, device=self.device)
-            logger.info(f"Model loaded successfully on device: {self.device}")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            raise
+            import torch
+
+            if isinstance(device, torch.device):
+                if device.type == "cuda":
+                    device_arg = 0
+                elif device.type == "mps":
+                    device_arg = "mps"
+                else:
+                    device_arg = -1
+        except Exception:
+            device_arg = -1
+
+        print("   -> Loading/Downloading model (ProsusAI/finbert)... This may take time.")
+        _sentiment_pipeline = pipeline("sentiment-analysis", model=self.model_name, tokenizer=self.model_name, device=device_arg)
+        self.device = device
+        print("✅ Model loaded.")
+        return _sentiment_pipeline
 
     def analyze_headlines(self, df: pd.DataFrame, text_col: str = 'headline', batch_size: int = 32) -> pd.DataFrame:
         """
@@ -258,6 +277,8 @@ class SentimentAnalyzer:
         if text_col not in df.columns:
             raise ValueError(f"Column '{text_col}' not found in DataFrame.")
 
+        sentiment_pipeline = self._get_pipeline()
+
         headlines = df[text_col].astype(str).tolist()
         results = []
         
@@ -269,7 +290,7 @@ class SentimentAnalyzer:
             batch = headlines[i : i + batch_size]
             # top_k=None ensures we get probabilities for ALL labels (Pos, Neg, Neu)
             # Truncation=True to handle long headlines
-            batch_results = self.pipeline(batch, padding=True, truncation=True, top_k=None)
+            batch_results = sentiment_pipeline(batch, padding=True, truncation=True, top_k=None)
             results.extend(batch_results)
             
         # Compute Continuous Scores (Prob(Pos) - Prob(Neg))

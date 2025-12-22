@@ -5,7 +5,7 @@ Defines the business and technical metrics used in the project.
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, precision_score, recall_score, f1_score
 from typing import Dict, Any
 
 def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
@@ -24,6 +24,16 @@ def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> f
         return 0.0
         
     return np.sqrt(252) * (mean_excess_return / std_excess_return)
+
+
+def calculate_max_drawdown(returns: pd.Series) -> float:
+    """Compute maximum drawdown for a returns series."""
+    if returns.empty:
+        return 0.0
+    cumulative = (1 + returns.fillna(0)).cumprod()
+    running_max = cumulative.cummax()
+    drawdown = (cumulative - running_max) / running_max
+    return float(drawdown.min())
 
 
 def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
@@ -47,6 +57,13 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
     # We use sign(y) where 0 is considered positive or handled consistently
     correct_direction = np.sign(y_true) == np.sign(y_pred)
     da = np.mean(correct_direction)
+
+    # Binary labels for classification-style metrics (positive vs non-positive)
+    y_true_bin = (y_true > 0).astype(int)
+    y_pred_bin = (y_pred > 0).astype(int)
+    precision = precision_score(y_true_bin, y_pred_bin, zero_division=0)
+    recall = recall_score(y_true_bin, y_pred_bin, zero_division=0)
+    f1 = f1_score(y_true_bin, y_pred_bin, zero_division=0)
     
     # Sharpe Ratio of the STRATEGY (assuming we trade based on prediction sign)
     # Simple strategy: if pred > 0 buy, else sell/hold. 
@@ -59,6 +76,7 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
     # Strategy Return = sign(y_pred) * y_true (simplified)
     strategy_returns = np.sign(y_pred) * y_true
     strategy_sharpe = calculate_sharpe_ratio(strategy_returns)
+    max_dd = calculate_max_drawdown(strategy_returns)
 
     return {
         "MSE": mse,
@@ -66,7 +84,11 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
         "MAE": mae,
         "R2": r2,
         "Directional Accuracy": da,
+        "Precision": precision,
+        "Recall": recall,
+        "F1": f1,
         "Strategy Sharpe": strategy_sharpe,
+        "Max Drawdown": max_dd,
         "IC": y_true.corr(y_pred) # Information Coefficient (Pearson)
     }
 
@@ -79,5 +101,7 @@ def print_eval(metrics: Dict[str, float], model_name: str = "Model"):
     print(f"MAE:  {metrics['MAE']:.6f}")
     print(f"R2:   {metrics['R2']:.6f} (Higher is better)")
     print(f"DA:   {metrics['Directional Accuracy']:.2%} (Directional Accuracy)")
+    print(f"Precision: {metrics['Precision']:.2%}  Recall: {metrics['Recall']:.2%}  F1: {metrics['F1']:.2%}")
     print(f"IC:   {metrics['IC']:.4f} (Information Coefficient)")
     print(f"Sharpe: {metrics['Strategy Sharpe']:.4f} (Annualized Strategy Return)")
+    print(f"Max Drawdown: {metrics['Max Drawdown']:.4f}")

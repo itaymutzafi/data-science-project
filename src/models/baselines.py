@@ -5,7 +5,7 @@ This module contains simple baseline models to serve as performance benchmarks.
 
 import numpy as np
 import pandas as pd
-from typing import Optional
+from typing import Optional, Union
 
 class NaiveBaseline:
     """
@@ -49,12 +49,35 @@ class RandomBaseline:
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         
-    def fit(self, X: pd.DataFrame, y: pd.Series):
-        """Learn mean and std from training target."""
-        self.mu = y.mean()
-        self.sigma = y.std()
+    def fit(self, X: Optional[Union[pd.DataFrame, pd.Series]] = None, y: Optional[pd.Series] = None):
+        """Learn mean and std from training target.
+
+        Args:
+            X: Optional feature matrix. If ``y`` is None and ``X`` is a Series, it
+                is treated as the target to preserve backward compatibility with
+                existing callers.
+            y: Target series. Preferred argument for the target values.
+
+        Returns:
+            self
+        """
+        target = y if y is not None else X
+
+        if target is None:
+            raise ValueError("RandomBaseline.fit requires a target series.")
+
+        if isinstance(target, pd.DataFrame):
+            raise ValueError("Provide the target as a Series instead of a DataFrame.")
+
+        target_series = pd.Series(target)
+        self.mu = float(target_series.mean())
+        self.sigma = float(target_series.std())
+        # Reset RNG so each fit starts from the same seed for reproducibility
+        self.rng = np.random.default_rng(self.seed)
+        return self
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
+        """Generate random predictions aligned to the input index."""
         return pd.Series(
             self.rng.normal(self.mu, self.sigma, size=len(X)),
             index=X.index

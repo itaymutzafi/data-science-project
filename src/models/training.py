@@ -3,11 +3,18 @@
 Contains model training utilities including Walk-Forward Validation.
 """
 
-from typing import Any, Tuple, Dict, List
-import pandas as pd
+import copy
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
+import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 from src.evaluation.metrics import evaluate_regression
+
+try:
+    from sklearn.base import clone
+except Exception:
+    clone = None
 
 def time_series_split(data: pd.DataFrame, n_splits: int = 5):
     """
@@ -16,6 +23,22 @@ def time_series_split(data: pd.DataFrame, n_splits: int = 5):
     """
     tscv = TimeSeriesSplit(n_splits=n_splits)
     return tscv.split(data)
+
+def _init_model_instance(model_spec: Any) -> Any:
+    """Return a fresh model instance from a class, factory, or existing estimator."""
+    if callable(model_spec) and not hasattr(model_spec, "fit"):
+        return model_spec()
+
+    if clone is not None and hasattr(model_spec, "fit"):
+        try:
+            return clone(model_spec)
+        except Exception:
+            pass
+
+    try:
+        return copy.deepcopy(model_spec)
+    except Exception:
+        return model_spec
 
 def train_and_evaluate(
     model: Any, 
@@ -113,3 +136,47 @@ def train_and_evaluate(
     })
     
     return metrics, results_df
+
+
+def run_experiment(
+    models: Any,
+    X: pd.DataFrame,
+    y: pd.Series,
+    config: Dict[str, Any] | None = None,
+    logger: Any = None
+) -> Tuple[pd.DataFrame, Dict[str, pd.Series]]:
+    """Run walk-forward evaluation for one or many models with a common interface.
+
+    Args:
+        models: Estimator, model class/factory, or dict of {name: estimator/factory}.
+        X: Feature matrix.
+        y: Target series.
+        config: Optional configuration dictionary. Supports 'n_splits' and 'experiment_name'.
+        logger: Optional callable for logging progress (defaults to print).
+
+    Returns:
+        results_df: Metrics per model (index = model name).
+        predictions: Mapping of model name to prediction series aligned to test indices.
+    """
+    cfg = config or {}
+    n_splits = cfg.get("n_splits", 5)
+    log = logger or (lambda msg: print(msg))
+
+    model_dict = models if isinstance(models, dict) else {"model": models}
+    metrics_store: Dict[str, Dict[str, float]] = {}
+    predictions_store: Dict[str, pd.Series] = {}
+
+    log(f"Running experiment with {len(model_dict)} model(s); n_splits={n_splits}.")
+    for name, model_spec in model_dict.items():
+        log(f"Evaluating {name}...")
+        model_instance = _init_model_instance(model_spec)
+        metrics, preds_df = train_and_evaluate(model_instance, X, y, n_splits=n_splits)
+        if not metrics:
+            log(f"{name}: no metrics produced.")
+            continue
+        metrics_store[name] = metrics
+        if not preds_df.empty:
+            predictions_store[name] = preds_df["Predicted"]
+
+    results_df = pd.DataFrame(metrics_store).T if metrics_store else pd.DataFrame()
+    return results_df, predictions_store
