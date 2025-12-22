@@ -22,6 +22,8 @@ TICKER_TO_COMPANY_MAP = {
     "GOOG": "Google",
 }
 
+COMPANY_TO_TICKERS_MAP = {v : k for k,v in TICKER_TO_COMPANY_MAP.items()}
+
 TICKERS = list(TICKER_TO_COMPANY_MAP.keys())
 
 # Visualization Colors

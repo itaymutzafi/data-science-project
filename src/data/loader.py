@@ -227,8 +227,8 @@ def merge_df_by_date(
 def fetch_data_for_eda(ticker: str, start_time: date, end_time: date):
     Ticker = yf.Ticker(ticker)
     df = fetch_sample_data(Ticker, start_time, end_time)
-    df['Return'] = df['Close'].pct_change()
-    df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
+    df['Return'] = df['Close'].pct_change().bfill()
+    df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1)).bfill()
     return df
 
 

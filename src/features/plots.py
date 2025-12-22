@@ -7,7 +7,7 @@ import seaborn as sns
 
 from src.utils import statistic_tests as st
 import yfinance as yf
-from src.config import COMPANY_COLORS, AUX_COLORS, DAYNAMES, MONTHNAMES, TICKERS, TICKER_TO_COMPANY_MAP
+from src.config import *
 
 def return_plot(dfs: Dict[str, pd.DataFrame]) -> None:
     # 3. Return Seasonality - Daily (All companies)
@@ -126,7 +126,7 @@ def volatility(dfs: Dict[str, pd.DataFrame]) -> None:
         print("7. Volatility Analysis (All Companies)")
         # Calculate volatility for each company
         for name, df in dfs.items():
-            df['Vol20'] = df['Return'].rolling(20).std()
+            df['Vol20'] = df['Return'].rolling(20).std().bfill()
         
         plt.figure(figsize=(14, 6))
         for name, df in dfs.items():
@@ -191,8 +191,9 @@ def volatility(dfs: Dict[str, pd.DataFrame]) -> None:
 def moving_average(dfs: Dict[str, pd.DataFrame]) -> None:
     if all('Close' in df.columns for df in dfs.values()):
         for name, df in dfs.items():
-            df['MA20'] = df['Close'].rolling(20).mean()
-            df['MA50'] = df['Close'].rolling(50).mean()
+            # for the first 20 / 50 days - we fill the values with the value of the first valid day
+            df['MA20'] = df['Close'].rolling(20).mean().bfill()
+            df['MA50'] = df['Close'].rolling(50).mean().bfill()
         
         plt.figure(figsize=(14, 6))
         for name, df in dfs.items():
@@ -260,7 +261,7 @@ def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
         direction='nearest',
     )
     nearest.index = df.index
-    df['Days To Nearest Report'] = (nearest['filing_date'] - nearest.index).dt.days
+    df['Days To Nearest Report'] = abs((nearest['filing_date'] - nearest.index)).dt.days
     df['Days To Nearest Report'] = df['Days To Nearest Report'].fillna(np.inf)
 
     return df
@@ -286,6 +287,8 @@ def reports(dfs: Dict[str, pd.DataFrame]) -> None:
     plot_sec_fiilings_dates(reports_by_company)
     
     for company, df in dfs.items():
+        if company not in TICKERS:
+            company = COMPANY_TO_TICKERS_MAP[company]
         reports_list = reports_by_company[company]
         reports_df = pd.DataFrame(reports_list)
         if "date" not in reports_df.columns:
