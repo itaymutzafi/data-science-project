@@ -6,6 +6,7 @@ All plotting logic is centralized here to ensure uniform styling across the proj
 from pathlib import Path
 from typing import Dict, List
 
+from cycler import cycler
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,6 +25,7 @@ from src.config import (
 from src.utils import statistic_tests as st
 
 _STYLE_APPLIED = False
+ACADEMIC_PALETTE = ["#1B263B", "#0A9396", "#EE9B00", "#CA6702", "#9B2226"]
 
 
 def set_style() -> None:
@@ -32,21 +34,35 @@ def set_style() -> None:
     if _STYLE_APPLIED:
         return
 
-    sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
+    sns.set_theme(style="whitegrid", context="paper", palette=ACADEMIC_PALETTE)
     plt.rcParams.update(
         {
             "figure.figsize": (12, 6),
             "axes.titlesize": 16,
+            "axes.titleweight": "bold",
             "axes.labelsize": 14,
             "xtick.labelsize": 12,
             "ytick.labelsize": 12,
             "legend.fontsize": 12,
             "lines.linewidth": 2.0,
-            "grid.alpha": 0.3,
+            "grid.alpha": 0.25,
             "figure.dpi": 150,
+            "axes.facecolor": "#fbfbfd",
+            "axes.edgecolor": "#cccccc",
+            "axes.prop_cycle": cycler(color=ACADEMIC_PALETTE),
         }
     )
     _STYLE_APPLIED = True
+
+
+def _apply_academic_style(ax: plt.Axes, title: str | None = None) -> None:
+    """Format axes with consistent academic styling."""
+    if title:
+        ax.set_title(title, fontweight="bold")
+    ax.grid(True, alpha=0.25)
+    ax.set_facecolor("#fbfbfd")
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
 
 
 def save_fig(fig: plt.Figure, filename: str, folder: str = "results") -> Path:
@@ -149,8 +165,8 @@ def plot_walk_forward_validation(n_splits: int = 5, total_samples: int = 100) ->
     ax.set_yticks(range(n_splits))
     ax.set_yticklabels([f"Fold {i+1}" for i in range(n_splits)])
     ax.set_xlabel("Time Index")
-    ax.set_title("Strict Walk-Forward Validation (Expanding Window)")
     ax.legend(loc="lower right")
+    _apply_academic_style(ax, "Strict Walk-Forward Validation (Expanding Window)")
     plt.grid(True, axis="x", alpha=0.3)
     plt.tight_layout()
     plt.show()
@@ -192,54 +208,116 @@ def plot_autocorrelation(series: pd.Series, lags: int = 40) -> None:
     plt.show()
 
 
-def plot_context_comparison(target_series: pd.Series, aux_data: pd.DataFrame, target_name: str) -> None:
-    """Compare target stock vs macro/segment peers plus VIX."""
+def plot_context_comparison(data: pd.Series | Dict[str, pd.DataFrame], aux_data: pd.DataFrame, target_name: str = "Target") -> None:
+    """Compare stock(s) vs macro/segment peers plus VIX.
+    
+    Args:
+        data: Either a single Series (Close prices) or a Dict of DataFrames (df_s).
+        aux_data: DataFrame containing 'Nasdaq_100', 'VIX_Index', 'NVIDIA_Segment_Leader'.
+        target_name: Label for the single series if provided.
+    """
     set_style()
 
-    if target_series.index.tz is not None:
-        target_series = target_series.copy()
-        target_series.index = target_series.index.tz_localize(None)
-
+    # Pre-process aux_data
     if not isinstance(aux_data.index, pd.DatetimeIndex):
         try:
             aux_data.index = pd.to_datetime(aux_data.index)
         except Exception:
             pass
-
     if aux_data.index.tz is not None:
         aux_data = aux_data.copy()
         aux_data.index = aux_data.index.tz_localize(None)
 
-    common_idx = target_series.index.intersection(aux_data.index)
-    if common_idx.empty:
-        raise ValueError(
-            f"No overlapping dates found between target ({target_series.index.min().date()} - {target_series.index.max().date()}) "
-            f"and auxiliary data ({aux_data.index.min().date()} - {aux_data.index.max().date()})."
-        )
-
-    target = target_series.loc[common_idx]
-    aux = aux_data.loc[common_idx]
-
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), sharex=True, gridspec_kw={"height_ratios": [2, 1]})
     ax1, ax2 = axes
 
-    norm_target = (target / target.iloc[0]) * 100
-    norm_macro = (aux["Nasdaq_100"] / aux["Nasdaq_100"].iloc[0]) * 100
-    norm_segment = (aux["NVIDIA_Segment_Leader"] / aux["NVIDIA_Segment_Leader"].iloc[0]) * 100
+    # -- Handle input data (Series vs Dict) --
+    if isinstance(data, dict):
+        # Plot multiple stocks
+        stocks_to_plot = {}
+        for ticker, df in data.items():
+            if "Close" in df.columns:
+                stocks_to_plot[ticker] = df["Close"]
+        
+        # Determine common start date for normalization fallback
+        # We will normalize each stock to its first available point in the common range with aux_data
+        
+        for ticker, series in stocks_to_plot.items():
+            # Align timezone
+            if series.index.tz is not None:
+                series = series.copy()
+                series.index = series.index.tz_localize(None)
+            
+            # Intersection with aux info to ensure we plot on valid range
+            common_idx = series.index.intersection(aux_data.index)
+            if common_idx.empty:
+                continue
+            
+            sub_series = series.loc[common_idx]
+            # Normalize
+            if not sub_series.empty:
+                norm_series = (sub_series / sub_series.iloc[0]) * 100
+                ax1.plot(norm_series, label=f"{ticker}", linewidth=2, color=COMPANY_COLORS.get(ticker, None))
 
-    ax1.plot(norm_target, label=f"{target_name} (Target)", linewidth=2.5, color=COMPANY_COLORS.get(target_name, "#1f77b4"))
-    ax1.plot(norm_macro, label="Nasdaq 100 (Macro Baseline)", linestyle="--", alpha=0.8, color="black")
-    ax1.plot(norm_segment, label="NVIDIA (Segment Peer)", linestyle=":", alpha=0.8, color=COMPANY_COLORS.get("NVDA", "green"))
-    ax1.set_title(f"Contextual Analysis: {target_name} vs. Market & Segment", fontsize=12)
+    else:
+        # Legacy: Single Series
+        target_series = data
+        if target_series.index.tz is not None:
+            target_series = target_series.copy()
+            target_series.index = target_series.index.tz_localize(None)
+        
+        common_idx = target_series.index.intersection(aux_data.index)
+        if not common_idx.empty:
+            target = target_series.loc[common_idx]
+            norm_target = (target / target.iloc[0]) * 100
+            ax1.plot(norm_target, label=f"{target_name} (Target)", linewidth=2.5, color=COMPANY_COLORS.get(target_name, "#1f77b4"))
+
+    # -- Plot Benchmarks (Use the last common_idx or full aux_data range if possible) --
+    # For simplicity, we plot benchmarks over the full range of aux_data that overlaps with data
+    # But normalization requires a base point. We'll use the start of the aux_data window 
+    # that matches the broad time period of our stocks.
+    
+    # Heuristic: slice aux_data to roughly the data range
+    # Finding min/max dates from data input
+    if isinstance(data, dict):
+        all_dates = []
+        for df in data.values():
+             if not df.empty: all_dates.extend(df.index)
+        if all_dates:
+            min_date, max_date = min(all_dates), max(all_dates)
+            if hasattr(min_date, 'tz') and min_date.tz: min_date = min_date.tz_localize(None)
+            if hasattr(max_date, 'tz') and max_date.tz: max_date = max_date.tz_localize(None)
+        else:
+            min_date, max_date = aux_data.index.min(), aux_data.index.max()
+    else:
+        min_date = data.index.min()
+        max_date = data.index.max()
+        if hasattr(min_date, 'tz') and min_date.tz: min_date = min_date.tz_localize(None)
+        if hasattr(max_date, 'tz') and max_date.tz: max_date = max_date.tz_localize(None)
+
+    # Slice aux and normalize
+    aux_slice = aux_data.loc[(aux_data.index >= min_date) & (aux_data.index <= max_date)]
+    if not aux_slice.empty:
+        norm_macro = (aux_slice["Nasdaq_100"] / aux_slice["Nasdaq_100"].iloc[0]) * 100
+        norm_segment = (aux_slice["NVIDIA_Segment_Leader"] / aux_slice["NVIDIA_Segment_Leader"].iloc[0]) * 100
+
+        ax1.plot(norm_macro, label="Nasdaq 100 (Macro Baseline)", linestyle="--", alpha=0.8, color="black")
+        ax1.plot(norm_segment, label="NVIDIA (Segment Peer)", linestyle=":", alpha=0.8, color=COMPANY_COLORS.get("NVDA", "green"))
+    
+    ax1.set_title(f"Contextual Analysis: Stocks vs. Market & Segment", fontsize=12)
     ax1.set_ylabel("Normalized Price (Base=100)")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
 
+    # -- VIX Plot --
     color_vix = "tab:red"
-    ax2.plot(aux["VIX_Index"], color=color_vix, label="VIX (Volatility Index)", linewidth=1.5)
+    # Plot VIX over the same slice
+    if not aux_slice.empty:
+        ax2.plot(aux_slice["VIX_Index"], color=color_vix, label="VIX (Volatility Index)", linewidth=1.5)
+        ax2.fill_between(aux_slice.index, aux_slice["VIX_Index"], alpha=0.1, color=color_vix)
+    
     ax2.set_ylabel("VIX Index", color=color_vix)
     ax2.tick_params(axis="y", labelcolor=color_vix)
-    ax2.fill_between(aux.index, aux["VIX_Index"], alpha=0.1, color=color_vix)
     ax2.set_title("Market Risk Sentiment (VIX)")
     ax2.grid(True, alpha=0.3)
 
@@ -298,9 +376,11 @@ def plot_sentiment_distribution(df: pd.DataFrame, ticker: str | None = None, sen
     plt.tight_layout()
     plt.show()
 
-def plot_sentiment_label_distribution(df: pd.DataFrame, sentiment_col: str = "sentiment_mean") -> None:
+def plot_sentiment_label_distribution(df: pd.DataFrame | Dict[str, pd.DataFrame], sentiment_col: str = "sentiment_mean") -> None:
     """Bar chart of positive/neutral/negative counts from sentiment scores."""
     set_style()
+    df = _ensure_dataframe(df)
+
     if df.empty or sentiment_col not in df.columns:
         print(f"No sentiment column '{sentiment_col}' available to plot.")
         return
@@ -345,22 +425,62 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = "sentiment_me
     plt.show()
 
 
-def plot_sentiment_vs_price_grid(df: pd.DataFrame, tickers: List[str], sentiment_col: str = "Sentiment_Score", days: int | None = None) -> None:
+def plot_sentiment_vs_price_grid(
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
+    tickers: List[str],
+    sentiment_col: str = "sentiment_mean",
+    days: int | None = None,
+) -> None:
     """2x2 grid overlaying price vs sentiment for multiple tickers."""
     set_style()
+    df = _ensure_dataframe(df)
+
+    if df.empty:
+        print("No data available to plot.")
+        return
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharex=False)
     axes = axes.flatten()
+
+    # Allow graceful fallback if requested sentiment_col is missing
+    sentiment_fallbacks = [sentiment_col, "sentiment_mean_lag1", "Sentiment_Score", "sentiment_mean"]
+
     for ax, ticker in zip(axes, tickers):
         subset = df[df["Ticker"] == ticker].sort_index()
-        if subset.empty or sentiment_col not in subset.columns:
-            ax.text(0.5, 0.5, f"No data for {ticker}", ha="center")
+        if subset.empty:
+            ax.text(0.5, 0.5, f"No data for {ticker}", ha="center", va="center")
             continue
+
+        # Determine which sentiment column to use
+        use_col = next((c for c in sentiment_fallbacks if c in subset.columns), None)
+        if not use_col:
+            ax.text(
+                0.5,
+                0.5,
+                f"Missing sentiment for {ticker}",
+                ha="center",
+                va="center",
+            )
+            continue
+
+        price_col = "Close" if "Close" in subset.columns else "Adj Close" if "Adj Close" in subset.columns else None
+        if not price_col:
+            ax.text(
+                0.5,
+                0.5,
+                f"Missing price column for {ticker}",
+                ha="center",
+                va="center",
+            )
+            continue
+
         plot_data = subset.iloc[-days:] if days else subset
-        ax.plot(plot_data.index, plot_data["Close"], color=COMPANY_COLORS.get(ticker, "#1f77b4"), label="Close")
+        ax.plot(plot_data.index, plot_data[price_col], color=COMPANY_COLORS.get(ticker, "#1f77b4"), label="Close")
         ax2 = ax.twinx()
-        ax2.plot(plot_data.index, plot_data[sentiment_col], color="tab:orange", linestyle="--", alpha=0.6, label="Sentiment")
+        ax2.plot(plot_data.index, plot_data[use_col], color="tab:orange", linestyle="--", alpha=0.6, label="Sentiment")
         ax.set_title(f"{ticker}: Price vs Sentiment", fontsize=11)
         ax.grid(True, alpha=0.3)
+
     fig.suptitle("Price vs Sentiment Across Tickers", fontsize=15, fontweight="bold")
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
@@ -406,9 +526,11 @@ def plot_sentiment_summary(
     plt.show()
 
 
-def plot_market_overview(df: pd.DataFrame) -> None:
+def plot_market_overview(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
     """2x2 grid of adjusted close prices for all tickers."""
     set_style()
+    df = _ensure_dataframe(df)
+
     price_col = "Adj Close" if "Adj Close" in df.columns else "Close"
     if "Ticker" not in df.columns or price_col not in df.columns:
         print("Market overview requires 'Ticker' and price columns.")
@@ -427,13 +549,20 @@ def plot_market_overview(df: pd.DataFrame) -> None:
     plt.show()
 
 
-def plot_correlation_heatmap(df: pd.DataFrame) -> None:
+def plot_correlation_heatmap(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
     """Correlation heatmap of log returns across tickers."""
     set_style()
+    df = _ensure_dataframe(df)
+
     if "Ticker" not in df.columns or "Log_Return" not in df.columns:
         print("Correlation heatmap requires 'Ticker' and 'Log_Return' columns.")
         return
     pivot_ret = df.pivot_table(index=df.index, columns="Ticker", values="Log_Return")
+    # Drop tickers with no data to avoid empty/NaN-only heatmaps
+    pivot_ret = pivot_ret.dropna(axis=1, how="all")
+    if pivot_ret.empty:
+        print("No log return data available to plot correlation heatmap.")
+        return
     corr = pivot_ret.corr().round(2)
     plt.figure(figsize=(6, 5))
     sns.heatmap(corr, annot=True, cmap="Blues", vmin=-1, vmax=1, linewidths=0.5)
@@ -449,9 +578,11 @@ def plot_correlation_matrix(df: pd.DataFrame, tickers: List[str] | None = None) 
     plot_correlation_heatmap(df)
 
 
-def plot_return_grid(df: pd.DataFrame) -> None:
+def plot_return_grid(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
     """2x2 grid of log returns for all tickers."""
     set_style()
+    df = _ensure_dataframe(df)
+
     if "Ticker" not in df.columns or "Log_Return" not in df.columns:
         print("Return grid requires 'Ticker' and 'Log_Return' columns.")
         return
@@ -470,9 +601,29 @@ def plot_return_grid(df: pd.DataFrame) -> None:
     plt.show()
 
 
-def plot_return_distributions(df: pd.DataFrame) -> None:
+def _ensure_dataframe(data: pd.DataFrame | Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Helper: Normalize input to a single DataFrame with a Ticker column."""
+    if isinstance(data, dict):
+        processed_frames = []
+        for ticker, df in data.items():
+            temp = df.copy()
+            # Ensure datetime index and remove timezone for consistent plotting/merging
+            if not isinstance(temp.index, pd.DatetimeIndex):
+                temp.index = pd.to_datetime(temp.index)
+            if temp.index.tz is not None:
+                temp.index = temp.index.tz_localize(None)
+
+            temp["Ticker"] = ticker
+            processed_frames.append(temp)
+        return pd.concat(processed_frames, axis=0) if processed_frames else pd.DataFrame()
+    return data
+
+
+def plot_return_distributions(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
     """KDE of log-return distributions across tickers."""
     set_style()
+    df = _ensure_dataframe(df)
+    
     if "Ticker" not in df.columns or "Log_Return" not in df.columns:
         print("Return distribution plot requires 'Ticker' and 'Log_Return' columns.")
         return
@@ -884,7 +1035,7 @@ def plot_performance_comparison(results_df: pd.DataFrame, metric: str = "MSE") -
         for idx in sorted_df.index
     ]
     bars = plt.bar(sorted_df.index, sorted_df[metric], color=colors, alpha=0.8)
-    plt.title(f"Model Comparison: {metric}", fontweight="bold", fontsize=14)
+    _apply_academic_style(plt.gca(), f"Model Comparison: {metric}")
     plt.ylabel(metric)
     plt.xlabel("Model strategy")
     plt.xticks(rotation=45)
@@ -918,7 +1069,7 @@ def plot_cumulative_returns(y_true: pd.Series, model_predictions: Dict[str, pd.S
             color = "gray"
         plt.plot(common_idx, strat_curve, label=f"{name} Strategy", linewidth=2 if "LSTM" in name else 1.5, color=color)
 
-    plt.title("Equity Curve Comparison (Cumulative Returns)", fontweight="bold")
+    _apply_academic_style(plt.gca(), "Equity Curve Comparison (Cumulative Returns)")
     plt.xlabel("Date")
     plt.ylabel("Normalized Wealth (Start=1.0)")
     plt.legend()
@@ -989,7 +1140,7 @@ def plot_pred_vs_actual(y_true: pd.Series, predictions: Dict[str, pd.Series], ti
     for name, preds in predictions.items():
         idx = zoom_idx.intersection(preds.index)
         plt.plot(idx, preds.loc[idx], label=f"Predicted ({name})")
-    plt.title(title, fontsize=18)
+    _apply_academic_style(plt.gca(), title)
     plt.ylabel("Log Return")
     plt.legend()
     plt.tight_layout()
@@ -1010,7 +1161,7 @@ def plot_feature_importance(importances: pd.Series, top_k: int = 5, ticker: str 
     plt.figure(figsize=(8, 4))
     bar_color = COMPANY_COLORS.get(ticker, "#1f77b4") if ticker else "#1f77b4"
     plt.barh(top_vals.index[::-1], top_vals.values[::-1], color=bar_color)
-    plt.title("Permutation Importance (Validation)", fontsize=16)
+    _apply_academic_style(plt.gca(), "Permutation Importance (Validation)")
     plt.xlabel("MSE Increase")
     plt.tight_layout()
     plt.show()
@@ -1050,7 +1201,7 @@ def plot_accuracy_comparison(results: pd.DataFrame) -> None:
     set_style()
     ax = df_plot.plot(kind="bar", figsize=(10, 5), color=["#999999", COMPANY_COLORS.get("AAPL", "#1f77b4")])
     ax.set_ylabel("Directional Accuracy")
-    ax.set_title("Directional Accuracy by Ticker: Baseline vs LSTM", fontsize=16)
+    _apply_academic_style(ax, "Directional Accuracy by Ticker: Baseline vs LSTM")
     ax.set_ylim(0, 1)
     plt.xticks(rotation=0)
     plt.tight_layout()
@@ -1065,7 +1216,7 @@ def plot_metric_heatmap(data: pd.DataFrame, title: str = "Model Performance Heat
     set_style()
     plt.figure(figsize=(8, 5))
     sns.heatmap(data, annot=True, fmt=".3f", cmap="YlGnBu")
-    plt.title(title, fontsize=15)
+    _apply_academic_style(plt.gca(), title)
     plt.tight_layout()
     plt.show()
 
@@ -1078,7 +1229,7 @@ def plot_model_leaderboard(results_df: pd.DataFrame) -> None:
     set_style()
     plt.figure(figsize=(10, 6))
     sns.heatmap(results_df, annot=True, fmt=".3f", cmap="RdYlGn", cbar=True, linewidths=0.5)
-    plt.title("Model Performance Leaderboard (Walk-Forward Validation)", fontsize=15)
+    _apply_academic_style(plt.gca(), "Model Performance Leaderboard (Walk-Forward Validation)")
     plt.xlabel("Metrics")
     plt.ylabel("Models")
     plt.tight_layout()

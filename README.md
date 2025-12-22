@@ -22,10 +22,16 @@ The project follows a domain-driven hybrid architecture, distinguishing between 
 │   ├── data/                   # Data ingestion, loading, and schema validation
 │   ├── features/               # Feature engineering (Technical indicators, Sentiment analysis)
 │   ├── models/                 # Model definitions (Baselines, Machine Learning models)
+│   ├── pipelines/              # End-to-end data processing pipelines
 │   ├── evaluation/             # Statistical analysis, performance metrics, and visualization
 │   └── utils/                  # Utility functions
 └── tests/                      # Unit tests for pipeline assurance
 ```
+
+### Key Components
+-   **`src/pipelines/data_preparation.py`**: Handles data fetching, indicator calculation, and critically, the **Time-Shift (Target Generation)** to prevent look-ahead bias ($Y_{t+1}$).
+-   **`src/models/screening.py`**: Implements the **Walk-Forward Validation** engine and manages model definitions, ensuring strict data isolation during training.
+-   **`Final_Project_Report.ipynb`**: The central research report that orchestrates the data loading, modeling, and visualization.
 
 ## System Requirements
 - Python 3.8 or higher

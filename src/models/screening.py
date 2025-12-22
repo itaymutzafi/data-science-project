@@ -1,343 +1,291 @@
-"""Model screening utilities for multi-asset experiments."""
+"""Walk-forward screening with per-split scaling and pluggable model definitions."""
 
 from __future__ import annotations
 
 import copy
-from typing import Dict, Iterable, List
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.linear_model import ElasticNet, Lasso, LinearRegression, Ridge
-from sklearn.svm import SVR
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
 
-from src.features.preprocessing import TimeSeriesScaler
 from src.evaluation.metrics import evaluate_regression
 from src.models import baselines
 from src.models.lstm import LSTMRegressor
 
 
-TECH_COL_KEYS = [
-    "RSI",
-    "MACD",
-    "MACD_Signal",
-    "MACD_Hist",
-    "BB_Upper",
-    "BB_Lower",
-    "BB_Width",
-    "ATR",
-    "OBV",
-    "Log_Return",
-]
+@dataclass
+class ScreeningArtifacts:
+    """Container for screening outputs."""
 
-SENTIMENT_COL_PREFIXES = [
-    "sentiment_mean",
-    "sentiment_trend",
-    "sentiment_momentum",
-    "sentiment_volatility",
-    "market_sentiment",
-    "news_count",
-]
-
-def _init_model(model_spec):
-    """Return a fresh model instance."""
-    try:
-        return copy.deepcopy(model_spec)
-    except Exception:
-        return model_spec
-
-def _select_feature_sets(df: pd.DataFrame) -> Dict[str, List[str]]:
-    """Return feature subsets for screening."""
-    tech_cols = [c for c in df.columns if any(c.startswith(k) for k in TECH_COL_KEYS)]
-    sentiment_cols = [c for c in df.columns if any(c.startswith(p) for p in SENTIMENT_COL_PREFIXES)]
-    sets: Dict[str, List[str]] = {"Tech": tech_cols}
-    if sentiment_cols:
-        sets["Tech+Sentiment"] = sorted(set(tech_cols + sentiment_cols))
-    return sets
+    metrics: pd.DataFrame
+    best_model_artifact: object
+    last_X_val: pd.DataFrame
+    last_y_val: pd.Series
+    feature_cols: List[str]
+    scaler: Optional[StandardScaler]
 
 
-def _default_models(input_size: int) -> Dict[str, object]:
-    """Construct default model zoo for screening."""
-    models = {
+def _validate_input(df: pd.DataFrame, target_col: str) -> None:
+    """
+    Validate that required columns exist before screening.
+
+    Args:
+        df: Full dataset containing tickers, features, and target.
+        target_col: Name of the target column.
+
+    Raises:
+        ValueError: If required columns or expected feature hints are missing.
+    """
+    required = ["Ticker", target_col]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"Input dataframe is missing required columns: {missing}")
+
+    candidate_features = [
+        "Log_Return",
+        "Sentiment_Score",
+        "sentiment_mean",
+        "RSI",
+        "MACD",
+        "ATR",
+    ]
+    if not any(col in df.columns for col in candidate_features):
+        raise ValueError(
+            "No usable feature columns found (expected technical/sentiment features like "
+            "'Log_Return', 'RSI', 'Sentiment_Score')."
+        )
+
+
+def _prepare_feature_matrix(df: pd.DataFrame, target_col: str) -> pd.DataFrame:
+    """
+    Extract feature matrix and names from a ticker-specific slice.
+
+    Args:
+        df: Single-ticker DataFrame.
+        target_col: Name of the target column.
+
+    Returns:
+        Tuple of (X, feature_cols).
+    """
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    feature_cols = [c for c in numeric_cols if c not in {target_col} and c.lower() != "ticker"]
+    if not feature_cols:
+        raise ValueError("No numeric feature columns available after excluding target/ticker.")
+    return df[feature_cols], feature_cols
+
+
+def get_model_candidates(input_size: int) -> Dict[str, object]:
+    """
+    Define the model zoo to be evaluated.
+
+    To add a new model, extend the returned dictionary with a new key/value pair.
+    For example: ``models[\"XGBoost\"] = XGBRegressor(...)``.
+
+    Args:
+        input_size: Number of input features (used by sequence models such as LSTM).
+
+    Returns:
+        Mapping of model name to an unfitted estimator instance.
+    """
+    models: Dict[str, object] = {
         "NaiveBaseline": baselines.NaiveBaseline(strategy="zero"),
-        "Linear": LinearRegression(),
         "Ridge": Ridge(alpha=1.0),
-        "Lasso": Lasso(alpha=0.001, max_iter=5000),
-        "ElasticNet": ElasticNet(alpha=0.001, l1_ratio=0.5, max_iter=5000),
-        "RandomForest": RandomForestRegressor(n_estimators=300, random_state=42, n_jobs=-1),
-        "GradientBoosting": GradientBoostingRegressor(random_state=42),
-        "SVR": SVR(kernel="rbf", C=10.0, gamma="scale"),
+        "RandomForest": RandomForestRegressor(
+            n_estimators=200,
+            random_state=42,
+            n_jobs=-1,
+            max_depth=None,
+        ),
         "LSTM": LSTMRegressor(
             input_size=input_size,
-            hidden_size=32,
-            num_layers=1,
-            dropout=0.1,
+            hidden_size=64,
+            num_layers=2,
+            dropout=0.2,
             seq_length=20,
-            num_epochs=6,
+            num_epochs=10,
             batch_size=32,
         ),
     }
-
-    # Optional: XGBoost / LightGBM if available
-    try:
-        from xgboost import XGBRegressor
-
-        models["XGBoost"] = XGBRegressor(
-            n_estimators=400,
-            learning_rate=0.05,
-            max_depth=4,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-            n_jobs=-1,
-        )
-    except Exception:
-        pass
-
-    try:
-        from lightgbm import LGBMRegressor
-
-        models["LightGBM"] = LGBMRegressor(
-            n_estimators=400,
-            learning_rate=0.05,
-            num_leaves=31,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42,
-        )
-    except Exception:
-        pass
-
     return models
 
 
-def _expanding_window_splits(df: pd.DataFrame, n_splits: int = 3, min_train_size: int | None = None):
-    """Yield expanding-window train/test splits to prevent leakage."""
-    n = len(df)
-    if n_splits < 1 or n < 2:
-        return
-    test_size = max(1, n // (n_splits + 1))
-    start_train = min_train_size or test_size
-    for i in range(n_splits):
-        train_end = start_train + i * test_size
-        test_end = train_end + test_size
-        if test_end > n:
-            break
-        train = df.iloc[:train_end]
-        test = df.iloc[train_end:test_end]
-        if len(train) == 0 or len(test) == 0:
+def _train_models(X_train: pd.DataFrame, y_train: pd.Series, feature_cols: List[str], preset: Optional[Dict[str, object]] = None) -> Dict[str, object]:
+    """
+    Fit the model zoo on the provided training split.
+
+    Args:
+        X_train: Scaled training features.
+        y_train: Training targets.
+        feature_cols: Names of feature columns (used for LSTM input size).
+        preset: Optional pre-instantiated models to fit.
+
+    Returns:
+        Mapping of model name to fitted estimator.
+    """
+    candidates = preset if preset is not None else get_model_candidates(input_size=len(feature_cols))
+    fitted: Dict[str, object] = {}
+    for name, model in candidates.items():
+        model_copy = copy.deepcopy(model)
+        model_copy.fit(X_train, y_train)
+        fitted[name] = model_copy
+    return fitted
+
+
+def _evaluate_models(
+    models: Dict[str, object],
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    ticker: str,
+    fold_idx: int,
+) -> List[Dict[str, float]]:
+    """
+    Evaluate trained models on the validation split.
+
+    Args:
+        models: Mapping of model name to estimator.
+        X_val: Scaled validation features.
+        y_val: Validation targets.
+        ticker: Current ticker symbol.
+        fold_idx: Fold index from TimeSeriesSplit.
+
+    Returns:
+        List of metric records per model.
+    """
+    records: List[Dict[str, float]] = []
+    for name, model in models.items():
+        preds = model.predict(X_val)
+        preds_series = (
+            pd.Series(np.asarray(preds).ravel(), index=X_val.index)
+            if not hasattr(preds, "index")
+            else preds
+        )
+        aligned_idx = y_val.index.intersection(preds_series.index)
+        if aligned_idx.empty:
             continue
-        yield train, test
+        metrics = evaluate_regression(y_val.loc[aligned_idx], preds_series.loc[aligned_idx])
+        record = {
+            "Ticker": ticker,
+            "Model": name,
+            "Fold": fold_idx,
+        }
+        record.update({k: float(v) for k, v in metrics.items()})
+        records.append(record)
+    return records
 
 
-def run_model_screening(
+def run_screening(
     df: pd.DataFrame,
     tickers: Iterable[str],
     target_col: str = "Target",
-    n_splits: int = 3,
-    min_train_size: int | None = None,
-) -> pd.DataFrame:
+    n_splits: int = 5,
+    models: Optional[Dict[str, object]] = None,
+) -> ScreeningArtifacts:
     """
-    Screen multiple model families across feature subsets and tickers using walk-forward validation.
+    Execute walk-forward validation with per-split scaling and multiple models.
 
-    Returns a tidy DataFrame with metrics per (Ticker, Feature_Set, Model, Fold).
+    Args:
+        df: Full dataset containing all tickers and features.
+        tickers: Iterable of ticker symbols to evaluate.
+        target_col: Name of the target column.
+        n_splits: Number of folds for TimeSeriesSplit.
+        models: Optional pre-instantiated model dictionary. If None, defaults to get_model_candidates.
+
+    Returns:
+        ScreeningArtifacts with aggregated metrics and the final validation artifacts.
     """
+    _validate_input(df, target_col=target_col)
+
     records: List[Dict[str, float]] = []
-    df_sorted = df.sort_index()
+    best_model_artifact: object | None = None
+    last_X_val: pd.DataFrame | None = None
+    last_y_val: pd.Series | None = None
+    last_scaler: StandardScaler | None = None
+    last_feature_cols: List[str] = []
 
     for ticker in tickers:
-        df_t = df_sorted[df_sorted["Ticker"] == ticker].dropna(subset=[target_col])
-        feature_sets = _select_feature_sets(df_t)
-        if not feature_sets:
+        df_t = df[df["Ticker"] == ticker].dropna(subset=[target_col]).sort_index()
+        if df_t.empty:
             continue
 
-        for subset_name, feature_cols in feature_sets.items():
-            if not feature_cols:
+        X_all, feature_cols = _prepare_feature_matrix(df_t, target_col=target_col)
+        y_all = df_t[target_col]
+
+        splitter = TimeSeriesSplit(n_splits=n_splits)
+
+        for fold_idx, (train_idx, val_idx) in enumerate(splitter.split(X_all)):
+            X_train_raw, X_val_raw = X_all.iloc[train_idx], X_all.iloc[val_idx]
+            y_train, y_val = y_all.iloc[train_idx], y_all.iloc[val_idx]
+
+            if X_train_raw.empty or X_val_raw.empty:
                 continue
-            models_config = _default_models(input_size=len(feature_cols))
-            for fold_idx, (train_df, test_df) in enumerate(_expanding_window_splits(df_t, n_splits=n_splits, min_train_size=min_train_size)):
-                scaler = TimeSeriesScaler()
-                scaler.fit(train_df, columns=feature_cols)
-                X_train = scaler.transform(train_df, columns=feature_cols)[feature_cols]
-                X_test = scaler.transform(test_df, columns=feature_cols)[feature_cols]
-                y_train = train_df[target_col]
-                y_test = test_df[target_col]
 
-                for model_name, model_spec in models_config.items():
-                    model = _init_model(model_spec)
-                    model.fit(X_train, y_train)
-                    preds = model.predict(X_test)
-                    if not hasattr(preds, "index"):
-                        preds = pd.Series(np.asarray(preds).ravel(), index=X_test.index)
-                    preds = preds.dropna()
-                    aligned_idx = y_test.index.intersection(preds.index)
-                    if aligned_idx.empty:
-                        continue
-                    metrics = evaluate_regression(y_test.loc[aligned_idx], preds.loc[aligned_idx])
-                    rec = {
-                        "Ticker": ticker,
-                        "Feature_Set": subset_name,
-                        "Model": model_name,
-                        "Fold": fold_idx,
-                    }
-                    rec.update({k: float(v) for k, v in metrics.items()})
-                    records.append(rec)
+            scaler = StandardScaler()
+            X_train_scaled = pd.DataFrame(
+                scaler.fit_transform(X_train_raw),
+                index=X_train_raw.index,
+                columns=feature_cols,
+            )
+            X_val_scaled = pd.DataFrame(
+                scaler.transform(X_val_raw),
+                index=X_val_raw.index,
+                columns=feature_cols,
+            )
 
-    return pd.DataFrame(records)
+            trained_models = _train_models(X_train_scaled, y_train, feature_cols, preset=models)
+            fold_records = _evaluate_models(
+                trained_models,
+                X_val_scaled,
+                y_val,
+                ticker,
+                fold_idx,
+            )
+            records.extend(fold_records)
 
+            # Persist the last fold artifacts for downstream explainability
+            best_model_artifact = trained_models.get("LSTM")
+            last_X_val = X_val_scaled
+            last_y_val = y_val
+            last_scaler = scaler
+            last_feature_cols = feature_cols
 
-def run_screening(df: pd.DataFrame, tickers: Iterable[str], target_col: str = "Target") -> pd.DataFrame:
-    """Convenience wrapper for default walk-forward screening."""
-    return run_model_screening(df=df, tickers=tickers, target_col=target_col, n_splits=3, min_train_size=None)
+    metrics_df = pd.DataFrame(records)
+    if metrics_df.empty:
+        raise ValueError("No metrics were produced. Check that the input data has sufficient rows per ticker.")
 
-
-def run_feature_combinations_experiment(
-    df: pd.DataFrame,
-    tickers: Iterable[str],
-    target_col: str = "Target",
-    n_splits: int = 3,
-    min_train_size: int | None = None,
-) -> pd.DataFrame:
-    """
-    Train multiple models across feature combinations (Technical, Sentiment, Combined) with walk-forward validation.
-
-    This is intentionally heavier and logs progress for transparency.
-    """
-    records: List[Dict[str, float]] = []
-    df_sorted = df.sort_index().copy()
-
-    # Ensure lag features exist (up to 5)
-    if "Log_Return" in df_sorted.columns:
-        for k in range(1, 6):
-            col = f"Log_Return_Lag_{k}"
-            if col not in df_sorted.columns:
-                df_sorted[col] = df_sorted["Log_Return"].shift(k)
-
-    feature_sets = {
-        "Technical_Only": [
-            "RSI",
-            "MACD",
-            "MACD_Signal",
-            "MACD_Hist",
-            "BB_Upper",
-            "BB_Lower",
-            "BB_Width",
-            "ATR",
-            "OBV",
-            "Log_Return_Lag_1",
-            "Log_Return_Lag_2",
-            "Log_Return_Lag_3",
-            "Log_Return_Lag_4",
-            "Log_Return_Lag_5",
-        ],
-        "Sentiment_Only": [
-            "Sentiment_Score",
-            "sentiment_mean",
-            "sentiment_mean_lag1",
-        ],
-        "Combined": [],  # populated dynamically as union of the above
-    }
-    feature_sets["Combined"] = sorted(set(feature_sets["Technical_Only"] + feature_sets["Sentiment_Only"]))
-
-    model_names = ["Ridge", "RandomForest", "LSTM"]
-
-    for ticker in tickers:
-        df_t = df_sorted[df_sorted["Ticker"] == ticker].copy()
-        if df_t.empty or target_col not in df_t.columns:
-            continue
-        for f_name, candidate_cols in feature_sets.items():
-            feature_cols = [c for c in candidate_cols if c in df_t.columns]
-            if not feature_cols:
-                continue
-            df_feat = df_t.dropna(subset=feature_cols + [target_col]).sort_index()
-            if df_feat.empty:
-                continue
-            for model_name in model_names:
-                print(f"Training {model_name} on {ticker} using {f_name}...")
-                for fold_idx, (train_df, test_df) in enumerate(
-                    _expanding_window_splits(df_feat, n_splits=n_splits, min_train_size=min_train_size)
-                ):
-                    scaler = TimeSeriesScaler()
-                    scaler.fit(train_df, columns=feature_cols)
-                    X_train = scaler.transform(train_df, columns=feature_cols)[feature_cols]
-                    X_test = scaler.transform(test_df, columns=feature_cols)[feature_cols]
-                    y_train = train_df[target_col]
-                    y_test = test_df[target_col]
-
-                    if model_name == "Ridge":
-                        model = Ridge(alpha=1.0)
-                    elif model_name == "RandomForest":
-                        model = RandomForestRegressor(n_estimators=300, random_state=42, n_jobs=-1)
-                    elif model_name == "LSTM":
-                        model = LSTMRegressor(
-                            input_size=len(feature_cols),
-                            hidden_size=32,
-                            num_layers=1,
-                            dropout=0.1,
-                            seq_length=20,
-                            num_epochs=8,
-                            batch_size=32,
-                        )
-                    else:
-                        model = LinearRegression()
-
-                    model.fit(X_train, y_train)
-                    preds = model.predict(X_test)
-                    if not hasattr(preds, "index"):
-                        preds = pd.Series(np.asarray(preds).ravel(), index=X_test.index)
-                    preds = preds.dropna()
-                    aligned_idx = y_test.index.intersection(preds.index)
-                    if aligned_idx.empty:
-                        continue
-                    metrics = evaluate_regression(y_test.loc[aligned_idx], preds.loc[aligned_idx])
-                    rec = {
-                        "Ticker": ticker,
-                        "Feature_Set": f_name,
-                        "Model": model_name,
-                        "Fold": fold_idx,
-                    }
-                    rec.update({k: float(v) for k, v in metrics.items()})
-                    records.append(rec)
-    return pd.DataFrame(records)
-
-
-def display_leaderboard(results_df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate results and display sorted leaderboard plus sentiment impact plot."""
-    if results_df.empty:
-        print("No results to display.")
-        return results_df
-    grouped = (
-        results_df.groupby(["Ticker", "Feature_Set", "Model"])[["MSE", "Directional Accuracy", "Strategy Sharpe"]]
+    leaderboard = (
+        metrics_df.groupby(["Ticker", "Model"])[["MSE", "Directional Accuracy", "Strategy Sharpe"]]
         .mean()
         .reset_index()
+        .sort_values("Strategy Sharpe", ascending=False)
     )
-    leaderboard = grouped.sort_values("Strategy Sharpe", ascending=False)
-    print("Top models by Sharpe:")
-    print(leaderboard.head(10))
 
-    try:
-        from src.evaluation import plots as eval_plots
+    artifacts = ScreeningArtifacts(
+        metrics=leaderboard,
+        best_model_artifact=best_model_artifact,
+        last_X_val=last_X_val if last_X_val is not None else pd.DataFrame(),
+        last_y_val=last_y_val if last_y_val is not None else pd.Series(dtype=float),
+        feature_cols=last_feature_cols,
+        scaler=last_scaler,
+    )
+    return artifacts
 
-        # Plot leaderboard heatmap aggregated over models
-        leader_pivot = (
-            leaderboard.groupby("Model")[["MSE", "Directional Accuracy", "Strategy Sharpe"]]
-            .mean()
-            .sort_values("Directional Accuracy", ascending=False)
-        )
-        eval_plots.plot_model_leaderboard(leader_pivot)
 
-        # Sentiment impact: compare Technical vs Combined directional accuracy per ticker (best model each set)
-        impact = (
-            leaderboard[leaderboard["Feature_Set"].isin(["Technical_Only", "Combined"])]
-            .sort_values("Directional Accuracy", ascending=False)
-            .groupby(["Ticker", "Feature_Set"])["Directional Accuracy"]
-            .first()
-            .unstack()
-        )
-        if not impact.empty:
-            impact = impact.rename(columns={"Technical_Only": "Technical", "Combined": "Combined"})
-            eval_plots.plot_accuracy_comparison(impact)
-    except Exception as e:
-        print(f"Could not render plots: {e}")
+def run_walk_forward_screening(
+    df: pd.DataFrame,
+    tickers: Iterable[str],
+    target_col: str = "Target",
+    n_splits: int = 5,
+    models: Optional[Dict[str, object]] = None,
+) -> ScreeningArtifacts:
+    """
+    Backwards-compatible alias for run_screening.
+    """
+    return run_screening(df=df, tickers=tickers, target_col=target_col, n_splits=n_splits, models=models)
 
-    return leaderboard
+
+__all__ = ["run_screening", "run_walk_forward_screening", "ScreeningArtifacts"]

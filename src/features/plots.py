@@ -5,10 +5,9 @@ import matplotlib.dates as mdates
 from typing import Dict, List
 import seaborn as sns
 
-from sympy import true
 from src.utils import statistic_tests as st
 import yfinance as yf
-from src.config import COMPANY_COLORS, DAYNAMES, MONTHNAMES, TICKERS, TICKER_TO_COMPANY_MAP
+from src.config import COMPANY_COLORS, AUX_COLORS, DAYNAMES, MONTHNAMES, TICKERS, TICKER_TO_COMPANY_MAP
 
 def return_plot(dfs: Dict[str, pd.DataFrame]) -> None:
     # 3. Return Seasonality - Daily (All companies)
@@ -210,10 +209,16 @@ def moving_average(dfs: Dict[str, pd.DataFrame]) -> None:
 
 def plot_sec_fiilings_dates(reports_by_company):
     fig, ax = plt.subplots(figsize=(12, 6))
+    has_data = False
     for i, ticker in enumerate(TICKERS):
         filings_list = reports_by_company[ticker]
         filings_df = pd.DataFrame(filings_list)
 
+        if filings_df.empty or 'date' not in filings_df.columns:
+            print(f"No filing dates available for {ticker}. Skipping.")
+            continue
+
+        has_data = True
         filings_df['date'] = pd.to_datetime(filings_df['date'])
 
         company_name = TICKER_TO_COMPANY_MAP.get(ticker, ticker)
@@ -221,6 +226,10 @@ def plot_sec_fiilings_dates(reports_by_company):
 
         ax.scatter(filings_df['date'], [i] * len(filings_df), 
                 label=company_name, color=color, alpha=0.7, s=20)
+
+    if not has_data:
+        print("No filing dates available for any ticker. Skipping filings plot.")
+        return
 
     ax.set_yticks(range(len(TICKERS)))
     ax.set_yticklabels([TICKER_TO_COMPANY_MAP[t] for t in TICKERS])
@@ -261,7 +270,14 @@ def create_reports_dic() -> Dict:
 
     for company_name in TICKERS:
         ticker = yf.Ticker(company_name)
-        reports_by_company[company_name] = ticker.get_sec_filings()
+        filings_fn = getattr(ticker, "get_sec_filings", None)
+        filings = []
+        if callable(filings_fn):
+            filings = filings_fn()
+        else:
+            # Fallback: skip gracefully when API not available in current yfinance
+            print(f"Warning: SEC filings API not available for {company_name}. Skipping.")
+        reports_by_company[company_name] = filings
 
     return reports_by_company
 
@@ -272,21 +288,168 @@ def reports(dfs: Dict[str, pd.DataFrame]) -> None:
     for company, df in dfs.items():
         reports_list = reports_by_company[company]
         reports_df = pd.DataFrame(reports_list)
+        if "date" not in reports_df.columns:
+            print(f"No filing dates available for {company}. Skipping date merge.")
+            continue
         report_dates = reports_df["date"]
         dfs[company] = create_days_to_report(df, report_dates)
     
 def plot_corrletion_companies(df_s):
-    cols = ['Close', 'Volume', 'MSFT - Close', 'MSFT - Volume', 'GOOG - Close', 'GOOG - Volume', 'AMZN - Close', 'AMZN - Volume']
-    corr_df = df_s["AAPL"][cols].corr()
-    sns.heatmap(corr_df, annot=True, cmap="coolwarm", fmt=".2f")
-    plt.title("Correlation Between APPLE and other stocks")
+    """
+    Correlation heatmap across companies' Close/Volume.
+    Works directly on df_s (dict of dataframes) without assuming Apple-specific columns.
+    """
+    if not df_s:
+        print("No data provided.")
+        return
+
+    # Build a combined dataframe with standardized column names per ticker
+    combined = pd.DataFrame()
+    for ticker, df in df_s.items():
+        temp = df.copy()
+        if not isinstance(temp.index, pd.DatetimeIndex):
+            temp.index = pd.to_datetime(temp.index)
+        if temp.index.tz is not None:
+            temp.index = temp.index.tz_localize(None)
+
+        cols = {}
+        if "Close" in temp.columns:
+            cols[f"{ticker} - Close"] = temp["Close"]
+        if "Volume" in temp.columns:
+            cols[f"{ticker} - Volume"] = temp["Volume"]
+        if not cols:
+            continue
+
+        temp_df = pd.DataFrame(cols)
+        combined = temp_df if combined.empty else combined.join(temp_df, how="outer")
+
+    if combined.empty:
+        print("No overlapping Close/Volume data to correlate.")
+        return
+
+    corr_df = combined.corr().round(2)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(corr_df, annot=True, cmap="coolwarm", fmt=".2f", vmin=-1, vmax=1)
+    plt.title("Correlation Between Stocks (Close & Volume)")
+    plt.tight_layout()
     plt.show()
+
+def add_auxiliary_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame) -> None:
+    """
+    Merges selected auxiliary features (e.g., Nasdaq, VIX) into each company's DataFrame 
+    and plots them for visual inspection.
+    """
+    if aux_data.empty:
+        print("Auxiliary data is empty. Skipping feature integration.")
+        return
+
+    # Ensure aux_data index is tz-naive for merging
+    if aux_data.index.tz is not None:
+        aux_data = aux_data.copy()
+        aux_data.index = aux_data.index.tz_localize(None)
+
+    features_to_add = aux_data.columns.tolist()
+    print(f"Integrating Auxiliary Features: {features_to_add}")
+
+    for name, df in dfs.items():
+        if df.index.tz is not None:
+            df.index = df.index.tz_localize(None)
+        
+        # Merge left on index
+        # We use join to keep the original index
+        # Check if columns already exist to avoid duplication/suffixes
+        new_cols = [c for c in features_to_add if c not in df.columns]
+        
+        if new_cols:
+            dfs[name] = df.join(aux_data[new_cols], how='left')
+            # Forward fill to handle missing daily data if aux matches higher timeframe or gaps
+            dfs[name][new_cols] = dfs[name][new_cols].ffill()
+        
+            # Forward fill to handle missing daily data if aux matches higher timeframe or gaps
+            dfs[name][new_cols] = dfs[name][new_cols].ffill()
+        
+    # --- Visualization 1: Combined Trend Plot (All Stocks + Aux Features) ---
+    print(f"\nVisualizing Combined Context for {len(dfs)} companies...")
+    plt.figure(figsize=(16, 8))
+    
+    # 1. Plot Aux Features (Background context)
+    for col in features_to_add:
+        # We can take the data from aux_data directly for the full range, 
+        # or from the first df to ensure alignment. Using aux_data with alignment:
+        series = aux_data[col].dropna()
+        # Align to the date range of the stocks roughly
+        common_start = min(df.index.min() for df in dfs.values())
+        common_end = max(df.index.max() for df in dfs.values())
+        
+        # Ensure timezone naive comparisons
+        if common_start.tz is not None: common_start = common_start.tz_localize(None)
+        if common_end.tz is not None: common_end = common_end.tz_localize(None)
+        
+        mask = (series.index >= common_start) & (series.index <= common_end)
+        series = series.loc[mask]
+        
+        if not series.empty:
+            norm = (series - series.mean()) / series.std()
+            color = AUX_COLORS.get(col, 'grey')
+            plt.plot(series.index, norm, label=f"{col} (Macro)", 
+                     color=color, linestyle='--', alpha=0.6, linewidth=1.5)
+
+    # 2. Plot Stocks (Foreground focus)
+    for ticker, df in dfs.items():
+        if 'Close' not in df.columns:
+            continue
+        series = df['Close'].dropna()
+        if not series.empty:
+            norm = (series - series.mean()) / series.std()
+            color = COMPANY_COLORS.get(ticker, COMPANY_COLORS.get(TICKER_TO_COMPANY_MAP.get(ticker), 'black'))
+            plt.plot(series.index, norm, label=f"{ticker}", 
+                     color=color, linewidth=2.5, alpha=0.9)
+
+    plt.title("Market Context: Stocks vs. Macro Indicators (Normalized Z-Score)", fontsize=14)
+    plt.xlabel("Date")
+    plt.ylabel("Z-Score (Std Dev from Mean)")
+    plt.legend(ncol=2) # Two columns for legend to save space
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    # --- Visualization 2: Combined Correlation Matrix (Grouped Bar) ---
+    corr_data = {}
+    
+    for ticker, df in dfs.items():
+        if 'Return' not in df.columns:
+            continue
+            
+        valid_cols = [c for c in features_to_add if c in df.columns]
+        if not valid_cols:
+            continue
+            
+        # correlation between Stock Return and Aux features
+        corrs = df[['Return'] + valid_cols].corr()['Return'].drop('Return')
+        corr_data[ticker] = corrs
+    
+    if corr_data:
+        corr_df = pd.DataFrame(corr_data) # Rows = Aux features, Cols = Tickers
+        
+        # Transpose for easier grouping by ticker if preferred, 
+        # OR keep as is to compare how 'VIX' affects AAPL vs AMZN.
+        # Let's group by Stock (Ticker) on X-axis, and bars for each Aux feature.
+        
+        # We want: X-axis = Tickers, Bars = Aux Features
+        ax = corr_df.T.plot(kind='bar', figsize=(14, 6), width=0.8, 
+                            color=[AUX_COLORS.get(col, 'grey') for col in corr_df.index])
+        
+        plt.title("Correlation: Daily Returns vs. Macro Indicators", fontsize=14)
+        plt.ylabel("Pearson Correlation")
+        plt.xlabel("Company")
+        plt.axhline(0, color='black', linewidth=0.8)
+        plt.grid(True, axis='y', alpha=0.3)
+        plt.legend(title="Macro Indicator")
+        plt.tight_layout()
+        plt.show()
     
 
     
     
     
     
-
-
-

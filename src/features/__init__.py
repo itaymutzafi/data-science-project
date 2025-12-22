@@ -1,5 +1,27 @@
+from .sentiment_analysis import (
+    display_demo_sentiment,
+    generate_daily_sentiment_features,
+    get_demo_day_data,
+    integrate_sentiment_data,
+    run_sentiment_pipeline_for_report,
+    verify_feature_integration,
+    verify_unified_data,
+)
+from .preprocessing import LogReturnTransformer, TimeSeriesScaler, create_sequences
 from .indicators import TechnicalIndicators
-from .preprocessing import LogReturnTransformer
+from . import plots as feature_plots
 
-# Re-export plotting utilities from the centralized evaluation module for backward compatibility.
-from src.evaluation.plots import return_plot, volatility, moving_average, reports, plot_corrletion_companies
+__all__ = [
+    "display_demo_sentiment",
+    "generate_daily_sentiment_features",
+    "get_demo_day_data",
+    "integrate_sentiment_data",
+    "run_sentiment_pipeline_for_report",
+    "verify_feature_integration",
+    "verify_unified_data",
+    "LogReturnTransformer",
+    "TimeSeriesScaler",
+    "create_sequences",
+    "TechnicalIndicators",
+    "feature_plots",
+]

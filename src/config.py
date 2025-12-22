@@ -61,6 +61,14 @@ AUX_TICKER_MAP = {
 }
 AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
 
+# Auxiliary Feature Colors (Distinct from Company Colors)
+AUX_COLORS = {
+    'Nasdaq_100': '#663399',          # RebeccaPurple (Rich, distinct index color)
+    'VIX_Index': '#E0115F',           # Ruby (Distinct from Microsoft Red, signaling alert)
+    'Treasury_10Y': '#708090',        # SlateGray (Neutral, bond-like)
+    'NVIDIA_Segment_Leader': '#20B2AA' # LightSeaGreen (Distinct from Apple, tech-like)
+}
+
 # Sentiment Data
 RAW_NEWS_PATH = "data/raw/news_last_5y.csv"
 PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"

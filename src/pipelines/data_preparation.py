@@ -4,7 +4,7 @@ Build the end-to-end feature matrix by merging price, sentiment, and technical i
 """
 
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,16 @@ DEFAULT_CACHE_PATH = config.PROCESSED_DATA_DIR / "final_dataset.parquet"
 
 
 def _load_price_data(tickers: Iterable[str], start_date, end_date) -> Dict[str, pd.DataFrame]:
-    """Fetch price data for each ticker."""
+    """Fetch price data for each ticker.
+
+    Args:
+        tickers: Symbols to fetch.
+        start_date: Start date for historical window.
+        end_date: End date for historical window.
+
+    Returns:
+        Mapping of ticker -> price DataFrame sorted by index.
+    """
     data: Dict[str, pd.DataFrame] = {}
     for ticker in tickers:
         ticker_obj = yf.Ticker(ticker)
@@ -31,7 +40,14 @@ def _load_price_data(tickers: Iterable[str], start_date, end_date) -> Dict[str, 
 
 
 def _apply_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Add technical indicators to a single ticker dataframe."""
+    """Add technical indicators to a single ticker DataFrame.
+
+    Args:
+        df: Price DataFrame containing at least Open/High/Low/Close/Volume.
+
+    Returns:
+        DataFrame with the original columns plus Log_Return and all indicators.
+    """
     indicators = TechnicalIndicators()
     close = df["Close"]
 
@@ -50,61 +66,83 @@ def _apply_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return enriched
 
 
-def _merge_with_sentiment(
-    price_df: pd.DataFrame, sentiment_df: pd.DataFrame, company_name: str
-) -> pd.DataFrame:
-    """Left-join price data with sentiment for a specific company."""
+def _collect_sentiment_columns(sentiment_df: pd.DataFrame) -> List[str]:
+    """Collect sentiment-related columns, excluding identifiers.
+
+    Args:
+        sentiment_df: Full sentiment feature DataFrame.
+
+    Returns:
+        List of sentiment feature column names.
+    """
     if sentiment_df.empty:
-        merged = price_df.copy()
-        sentiment_cols = [
-            "sentiment_mean",
-            "sentiment_std",
-            "news_count",
-            "sentiment_momentum_3d",
-            "sentiment_ma_7d",
-            "sentiment_trend",
-            "sentiment_volatility_7d",
-            "market_sentiment",
-        ]
-        for col in sentiment_cols:
-            merged[col] = 0.0
-        return merged
+        return []
+    return [
+        c
+        for c in sentiment_df.columns
+        if c not in {"company", "date"}
+    ]
+
+
+def _merge_with_sentiment(
+    price_df: pd.DataFrame,
+    sentiment_df: pd.DataFrame,
+    company_name: str,
+    sentiment_columns: List[str],
+) -> pd.DataFrame:
+    """
+    Left-join price data with sentiment for a specific company and preserve all sentiment columns.
+
+    Args:
+        price_df: Price and technical feature DataFrame for a single ticker.
+        sentiment_df: Full sentiment DataFrame covering all companies.
+        company_name: Company name that aligns with the sentiment data.
+        sentiment_columns: Columns to retain from the sentiment DataFrame.
+
+    Returns:
+        DataFrame with price, technical, and sentiment features aligned on the index.
+    """
+    price_aligned = price_df.copy()
+    price_aligned.index = pd.to_datetime(price_aligned.index)
+
+    # Ensure sentiment columns exist even if sentiment data is missing
+    if not sentiment_columns:
+        sentiment_columns = ["sentiment_mean", "news_count", "market_sentiment", "Sentiment_Score"]
 
     sent_company = sentiment_df[sentiment_df["company"] == company_name].copy()
-    if sent_company.empty:
-        merged = price_df.copy()
-        sentiment_cols = [
-            "sentiment_mean",
-            "sentiment_std",
-            "news_count",
-            "sentiment_momentum_3d",
-            "sentiment_ma_7d",
-            "sentiment_trend",
-            "sentiment_volatility_7d",
-            "market_sentiment",
-        ]
-        for col in sentiment_cols:
-            merged[col] = 0.0
-        return merged
+    if not sent_company.empty:
+        sent_company["date"] = pd.to_datetime(sent_company["date"])
+        sent_company = sent_company.set_index("date").sort_index()
+        joined = price_aligned.join(sent_company[sentiment_columns], how="left")
+    else:
+        joined = price_aligned.copy()
+        for col in sentiment_columns:
+            joined[col] = np.nan
 
-    sent_company["date"] = pd.to_datetime(sent_company["date"])
-    sent_company = sent_company.set_index("date").sort_index()
-    merged = price_df.join(sent_company, how="left")
-
-    sentiment_cols = [c for c in merged.columns if c.startswith("sentiment") or c in ("news_count", "market_sentiment")]
-    merged[sentiment_cols] = merged[sentiment_cols].ffill().fillna(0)
-    return merged
+    joined[sentiment_columns] = joined[sentiment_columns].ffill().fillna(0)
+    return joined
 
 
 def build_final_dataset(
     tickers: Iterable[str],
-    start_date,
-    end_date,
+    start_date=None,
+    end_date=None,
     use_cache: bool = True,
     cache_path: Path | None = None,
 ) -> pd.DataFrame:
     """
-    Build the full feature matrix: price + sentiment + technical indicators + target.
+    Build the full feature matrix: price + technical indicators + sentiment + target.
+
+    Args:
+        tickers: Iterable of ticker symbols.
+        start_date: Start date for historical pull.
+        end_date: End date for historical pull.
+        use_cache: Whether to read/write a cached parquet.
+        cache_path: Optional override for cache location.
+
+    Returns:
+        pd.DataFrame containing OHLCV, technical indicators, sentiment features,
+        ticker labels, Log_Return, and Target (Log_Return).
     """
     cache_path = cache_path or DEFAULT_CACHE_PATH
     cache_path = Path(cache_path)
@@ -116,26 +154,39 @@ def build_final_dataset(
     if use_cache and cache_path.exists():
         return pd.read_parquet(cache_path)
 
+    start_date = start_date or config.START_DATE
+    end_date = end_date or config.END_DATE
+
     price_data = _load_price_data(tickers, start_date, end_date)
     sentiment_all = run_sentiment_pipeline_for_report(pd.DataFrame(), config)
+    sentiment_columns = _collect_sentiment_columns(sentiment_all)
 
     processed_frames = []
     ticker_to_company = config.TICKER_TO_COMPANY_MAP
     for ticker in tickers:
         company_name = ticker_to_company.get(ticker, ticker)
-        df_price = price_data[ticker]
+        df_price = price_data[ticker].copy()
         df_price.index = pd.to_datetime(df_price.index)
-        df_price = _apply_indicators(df_price)
-        df_merged = _merge_with_sentiment(df_price, sentiment_all, company_name)
-        # Alias for readability in downstream EDA
+
+        df_with_indicators = _apply_indicators(df_price)
+        df_merged = _merge_with_sentiment(df_with_indicators, sentiment_all, company_name, sentiment_columns)
+
         if "sentiment_mean" in df_merged.columns and "Sentiment_Score" not in df_merged.columns:
             df_merged["Sentiment_Score"] = df_merged["sentiment_mean"]
+
         df_merged["Target"] = df_merged["Log_Return"].shift(-1)
         df_merged["Ticker"] = ticker
-        df_merged = df_merged.dropna()
-        processed_frames.append(df_merged)
 
-    full_df = pd.concat(processed_frames, axis=0)
+        feature_columns = [c for c in df_merged.columns if c not in {"Ticker"}]
+        df_imputed = df_merged.copy()
+        df_imputed[feature_columns] = df_imputed[feature_columns].ffill()
+        df_clean = df_imputed.dropna(subset=feature_columns + ["Target"])
+        processed_frames.append(df_clean)
+
+    if not processed_frames:
+        raise ValueError("No data available to build the final dataset.")
+
+    full_df = pd.concat(processed_frames, axis=0).sort_index()
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     full_df.to_parquet(cache_path)
     return full_df
