@@ -1,29 +1,22 @@
 import pandas as pd
-import numpy as np
 from scipy import stats
 import statsmodels.formula.api as smf
+from IPython.display import display
 
-def test_seasonality(
-    df: pd.DataFrame,
-    return_col: str, 
-    Day_or_Month: str,
-    alpha: float = 0.05,
-) -> dict:
+def test_seasonality(df: pd.DataFrame, return_col: str,  time_precision: str, alpha: float = 0.05) -> dict:
     """
-    Generic seasonality significance testing using datetime-based categories.
+    Generic seasonality significance testing using datetime-based categories
     """
-
     results = {}
     data = df.copy()
 
-    choose_base = sorted(data[Day_or_Month].dropna().unique())
+    choose_base = sorted(data[time_precision].dropna().unique())
     baseline = choose_base[0]
-
 
     # Prepare grouped returns
     grouped_returns = [
         group[return_col].dropna().values
-        for _, group in data.groupby(Day_or_Month)
+        for _, group in data.groupby(time_precision)
     ]
 
     # global tests
@@ -32,7 +25,7 @@ def test_seasonality(
 
     # OLS regression
     model = smf.ols(
-        f"{return_col} ~ C({Day_or_Month})",
+        f"{return_col} ~ C({time_precision})",
         data=data
     ).fit()
 
@@ -62,32 +55,13 @@ def test_seasonality(
     results["day_effects"] = coef_table
     return results
 
-from IPython.display import display
-
-def display_seasonality_results(results, alpha=0.05):
-    """
-    Pretty display of seasonality test results.
-    """
-
-    # ===============================
-    # 1. Headline summary
-    # ===============================
-    print("SEASONALITY TEST RESULTS")
-    print("=" * 40)
-
+def display_seasonality_results(results):
     baseline = results["baseline_day"]
-    detected = results["global_tests"]["seasonality_detected"]
-
     print(f"Baseline period: {baseline}")
-    print(
-        "Seasonality detected: "
-        + ("YES" if detected else "NO")
-    )
-    print()
+    
+    detected = results["global_tests"]["seasonality_detected"]
+    print(f"Seasonality detected: {detected}")
 
-    # ===============================
-    # 2. Global tests table
-    # ===============================
     global_tests_df = pd.DataFrame({
         "Statistic": ["ANOVA F", "ANOVA p-value", "Kruskal H", "Kruskal p-value"],
         "Value": [
@@ -98,24 +72,17 @@ def display_seasonality_results(results, alpha=0.05):
         ]
     })
 
-    print("Global significance tests")
     display(global_tests_df.style.format({"Value": "{:.4g}"}))
 
-    # ===============================
-    # 3. Day / Month effects table
-    # ===============================
     effects = results["day_effects"].copy()
-
     effects = effects.reset_index().rename(
         columns={"index": "Period"}
     )
-
     effects["Coefficient"] = effects["Coefficient"].round(5)
     effects["p_value"] = effects["p_value"].round(4)
-
     effects["Significant"] = effects["Significant"].map(
         {True: "Yes", False: "No"}
     )
 
-    print(f"📅 Effects relative to baseline ({baseline})")
+    print(f"Effects relative to baseline ({baseline})")
     display(effects)

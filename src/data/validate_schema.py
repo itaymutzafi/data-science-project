@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import pandas as pd
+from typing import Dict
 
 def load_schema(json_name):
     schema_path = Path(__file__).parent / json_name
@@ -60,13 +61,6 @@ def validate_schema(df, json_name):
 
     df, errors = date_column_check(df, errors)
 
-    # For future graphs add columns
-    if json_name == "schema_yf.json":        
-        if 'Day' not in df.columns:
-            df['Day'] = df.index.day_name()
-        if 'Month' not in df.columns:
-            df['Month'] = df.index.month
-
     for col, col_def in properties.items():
         if col.lower() == "date":
             continue
@@ -76,3 +70,8 @@ def validate_schema(df, json_name):
             df, errors = validate_column_type(df, col, col_def, errors)
 
     print_result(df, errors)
+
+def validate_schema_all_dfs(dfs: Dict[str, pd.DataFrame]) -> None:
+    for name, df in dfs.items():
+        print(f"========= Validating {name} =========")
+        validate_schema(df, "schema_yf.json")

@@ -5,12 +5,12 @@ and local file I/O operations (CSV, Parquet).
 """
 from datetime import date
 from pathlib import Path
-from typing import List, Union, Dict
+from typing import Union, Dict
 import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
-import numpy as np
-from src.config import AUX_DATA_PATH, AUX_TICKER_MAP
+
+from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, TICKERS
 
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y") -> pd.DataFrame:
@@ -154,82 +154,14 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
         print(f"Error fetching auxiliary data: {e}")
         return pd.DataFrame()
 
-
-def merge_df_by_date(
-    company_name: str,
-    main_df: pd.DataFrame,
-    other_companies: Dict,
-    output_filename : str = "merged_df.parquet",
-    how: str = "left") -> pd.DataFrame:
     
-    feature_dfs = list(other_companies.values())
-    feature_names = list(other_companies.keys())
-    
-    # Normalize inputs: convert single DataFrame to list for uniform processing
-    feature_dfs_list = [feature_dfs] if isinstance(feature_dfs, pd.DataFrame) else feature_dfs
+def fetch_data_for_eda(start_time: date, end_time: date) -> Dict[str, pd.DataFrame]:
+    df_s = {}
 
-    if isinstance(feature_names, str):
-        feature_names_list = [feature_names]
-    else: 
-        feature_names_list = feature_names
-
-    # Ensure index is DatetimeIndex
-    if not isinstance(main_df.index, pd.DatetimeIndex):
-        main_df.index = pd.to_datetime(main_df.index)
-    
-    columns_to_merge = ['Close', 'Volume']
-
-    print(f"Start Merging")
-
-    res_df = main_df.copy()
-   
-    # Merge each feature file
-    for i, feature_df in enumerate(feature_dfs_list):
-        feature_name = feature_names_list[i]
-
-        # Ensure feature index is DatetimeIndex
-        if not isinstance(feature_df.index, pd.DatetimeIndex):
-            feature_df.index = pd.to_datetime(feature_df.index)
-        
-        # Select only Open, Close, and Volume columns
-        available_cols = [col for col in columns_to_merge if col in feature_df.columns]
-        
-        if not available_cols:
-            print(f"Warning: No matching columns {columns_to_merge} found in {feature_name}. Skipping...")
-            continue
-        
-        feature_df_selected = feature_df[available_cols].copy()
-        feature_df_selected.columns = [f"{feature_name} - {col}" for col in feature_df_selected.columns]
-
-        new_cols = [c for c in feature_df_selected.columns if c not in res_df.columns]
-        if not new_cols:
-            print(f"Skipping {feature_name}: columns already exist in main_df.")
-            continue
-        
-        feature_df_selected = feature_df_selected[new_cols]
-
-        # Merge with main dataframe
-        res_df = res_df.join(feature_df_selected, how=how)
-        print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
-       
-    print(f"Final merged DataFrame shape: {res_df.shape}")
-    project_root = Path(__file__).resolve().parents[2]
-    cache_dir = project_root / "data" / "raw"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    output_filename = f"merged_{company_name}"
-    cache_path = cache_dir / output_filename
-    
-    res_df.to_parquet(cache_path)
-    print(f"Merged data saved to: {cache_path}")
-
-    return res_df
-    
-def fetch_data_for_eda(ticker: str, start_time: date, end_time: date):
-    Ticker = yf.Ticker(ticker)
-    df = fetch_sample_data(Ticker, start_time, end_time)
-    df['Return'] = df['Close'].pct_change().bfill()
-    df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1)).bfill()
-    return df
+    for ticker in TICKERS:
+        Ticker = yf.Ticker(ticker)
+        df_s[ticker] = fetch_sample_data(Ticker, start_time, end_time)
+    return df_s
 
 
 def load_stock_data(path: Union[str, Path]) -> pd.DataFrame:
