@@ -20,7 +20,7 @@ def save_merged_df_to_file(df: pd.DataFrame, ticker_name: str) -> None:
     project_root = Path(__file__).resolve().parents[2]
     cache_dir = project_root / "data" / "raw"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    output_filename = f"merged_{ticker_name}"
+    output_filename = f"merged_{ticker_name}.parquet"
     cache_path = cache_dir / output_filename
     
     df.to_parquet(cache_path)
