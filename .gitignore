@@ -15,6 +15,7 @@ env/
 # Jupyter Notebooks
 .ipynb_checkpoints/
 *-checkpoint.ipynb
+playground_modeling.ipynb
 
 # Data
 data/*
