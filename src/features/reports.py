@@ -90,8 +90,9 @@ def reports(dfs: Dict[str, pd.DataFrame]) -> None:
             company = COMPANY_TO_TICKERS_MAP[company]
         reports_list = reports_by_company[company]
         reports_df = pd.DataFrame(reports_list)
-        if "date" not in reports_df.columns:
-            print(f"No filing dates available for {company}. Skipping date merge.")
+        if "date" not in reports_df.columns or reports_df.empty:
+            print(f"No filing dates available for {company}. Filling 'Days To Nearest Report' with NaNs.")
+            df['Days To Nearest Report'] = np.nan
             continue
         report_dates = reports_df["date"]
         dfs[company] = create_days_to_report(df, report_dates)

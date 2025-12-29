@@ -6,8 +6,9 @@ This module contains simple baseline models to serve as performance benchmarks.
 import numpy as np
 import pandas as pd
 from typing import Optional, Union
+from .base import BaseModel
 
-class NaiveBaseline:
+class NaiveBaseline(BaseModel):
     """
     Predicts the next value based on the assumption of no change (Random Walk).
     For log-returns, the naive assumption is often 0 (price doesn't change).
@@ -18,8 +19,9 @@ class NaiveBaseline:
     def __init__(self, strategy: str = "zero"):
         self.strategy = strategy
         
-    def fit(self, X, y=None):
-        pass
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "NaiveBaseline":
+        # Naive models don't learn from data, but we accept arguments for API consistency.
+        return self
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """
@@ -31,14 +33,11 @@ class NaiveBaseline:
         if self.strategy == "zero":
             return pd.Series(0.0, index=X.index)
         elif self.strategy == "last":
-            # Assuming X contains the previous return or we need to pass it.
-            # For simplicity in this project's pipeline, we'll stick to 'zero' 
-            # as the primary naive baseline for *returns*.
-            raise NotImplementedError("Last-value strategy for returns requires lag feature access")
+            raise NotImplementedError("Last-value strategy requires lag feature access.")
         else:
             raise ValueError(f"Unknown strategy: {self.strategy}")
 
-class RandomBaseline:
+class RandomBaseline(BaseModel):
     """
     Predicts random values drawn from a normal distribution matching 
     the training data's statistics (mean, std).
@@ -49,29 +48,18 @@ class RandomBaseline:
         self.seed = seed
         self.rng = np.random.default_rng(seed)
         
-    def fit(self, X: Optional[Union[pd.DataFrame, pd.Series]] = None, y: Optional[pd.Series] = None):
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "RandomBaseline":
         """Learn mean and std from training target.
 
         Args:
-            X: Optional feature matrix. If ``y`` is None and ``X`` is a Series, it
-                is treated as the target to preserve backward compatibility with
-                existing callers.
-            y: Target series. Preferred argument for the target values.
+            X: Feature matrix.
+            y: Target series.
 
         Returns:
             self
         """
-        target = y if y is not None else X
-
-        if target is None:
-            raise ValueError("RandomBaseline.fit requires a target series.")
-
-        if isinstance(target, pd.DataFrame):
-            raise ValueError("Provide the target as a Series instead of a DataFrame.")
-
-        target_series = pd.Series(target)
-        self.mu = float(target_series.mean())
-        self.sigma = float(target_series.std())
+        self.mu = float(y.mean())
+        self.sigma = float(y.std())
         # Reset RNG so each fit starts from the same seed for reproducibility
         self.rng = np.random.default_rng(self.seed)
         return self
@@ -83,7 +71,7 @@ class RandomBaseline:
             index=X.index
         )
 
-class MarketBenchmark:
+class MarketBenchmark(BaseModel):
     """
     Represents a passive 'Buy & Hold' strategy.
     
@@ -97,15 +85,16 @@ class MarketBenchmark:
     def __init__(self):
         self.mu = 0.0
         
-    def fit(self, X: pd.DataFrame, y: pd.Series):
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "MarketBenchmark":
         """Learn the historical mean return."""
         self.mu = y.mean()
+        return self
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """Predict the historical mean for all steps."""
         return pd.Series(self.mu, index=X.index)
 
-class CAPMBaseline:
+class CAPMBaseline(BaseModel):
     """
     Capital Asset Pricing Model (CAPM) Baseline.
     
@@ -124,39 +113,29 @@ class CAPMBaseline:
         self.risk_free_rate = risk_free_rate
         self.market_return = 0.0
         
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series):
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "CAPMBaseline":
         """
-        Fits Beta if not provided, using SPY (Market) returns if available in X_train.
+        Fits Beta if not provided, using SPY (Market) returns if available in X.
         Otherwise, defaults to Beta=1.0 (Market Performer).
         """
         if self.beta is None:
-            # Try to find market return in features (assuming 'SPY_Ret' or similar exists)
-            # For this baseline, if we don't have explicit market data in X, 
-            # we might just default to 1.0 or calculate from a proxy if we had it.
-            # Here we'll assume a simple logic: if 'SPY' column exists, use it.
-            # Otherwise, Beta = 1.0.
-            
-            market_col = [c for c in X_train.columns if 'SPY' in c or 'Market' in c]
+            market_col = [c for c in X.columns if 'SPY' in c or 'Market' in c]
             if market_col:
                 # Simple covariance/variance estimate
-                market_ret = X_train[market_col[0]]
-                covariance = np.cov(y_train, market_ret)[0][1]
+                market_ret = X[market_col[0]]
+                covariance = np.cov(y, market_ret)[0][1]
                 variance = np.var(market_ret)
                 self.beta = covariance / variance if variance != 0 else 1.0
             else:
                 self.beta = 1.0 # Default to market beta
                 
         # Estimate expected market return (historical mean of market proxy or target if proxy missing)
-        # In a strict CAPM, this should be E[Rm]. We'll use the mean of y_train as a proxy 
-        # for "Market" if we don't have a separate market column, effectively making it 
-        # similar to MarketBenchmark but with the CAPM formulation structure.
-        # Ideally, X_train should have market returns.
-        
-        market_col = [c for c in X_train.columns if 'SPY' in c or 'Market' in c]
+        market_col = [c for c in X.columns if 'SPY' in c or 'Market' in c]
         if market_col:
-             self.market_return = X_train[market_col[0]].mean()
+             self.market_return = X[market_col[0]].mean()
         else:
-             self.market_return = y_train.mean() # Fallback
+             self.market_return = y.mean() # Fallback
+        return self
 
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """

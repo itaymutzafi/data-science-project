@@ -7,7 +7,7 @@ from .sentiment_analysis import (
     verify_feature_integration,
     verify_unified_data,
 )
-from .preprocessing import LogReturnTransformer, TimeSeriesScaler, create_sequences
+from .preprocessing import LogReturnTransformer, TimeSeriesScaler, MultiTickerScaler, create_sequences, add_technical_features
 from .indicators import TechnicalIndicators
 from .day_month import add_day_month_features
 from .log_return import add_return_features, return_day_boxplot, test_return_seasonality
@@ -17,6 +17,8 @@ from .peer_stock import add_peer_stock_features, peer_stock_correlation
 from .reports import reports
 from .plots import avg_attr_by_time_plot
 from .external_market import add_auxiliary_features
+from . import sets
+from . import targets
 
 __all__ = [
     "display_demo_sentiment",
@@ -28,7 +30,9 @@ __all__ = [
     "verify_unified_data",
     "LogReturnTransformer",
     "TimeSeriesScaler",
+    "MultiTickerScaler",
     "create_sequences",
+    "add_technical_features",
     "TechnicalIndicators",
     "add_day_month_features",
     "add_return_features",
@@ -45,4 +49,6 @@ __all__ = [
     "reports",
     "avg_attr_by_time_plot",
     "add_auxiliary_features",
+    "sets",
+    "targets",
 ]

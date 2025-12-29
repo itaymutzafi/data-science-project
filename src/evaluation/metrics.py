@@ -26,6 +26,7 @@ def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> f
     return np.sqrt(252) * (mean_excess_return / std_excess_return)
 
 
+
 def calculate_max_drawdown(returns: pd.Series) -> float:
     """Compute maximum drawdown for a returns series."""
     if returns.empty:
@@ -34,6 +35,55 @@ def calculate_max_drawdown(returns: pd.Series) -> float:
     running_max = cumulative.cummax()
     drawdown = (cumulative - running_max) / running_max
     return float(drawdown.min())
+
+
+def calculate_sortino_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
+    """Compute (annualized) Sortino ratio (return / downside deviation)."""
+    if len(returns) == 0:
+        return 0.0
+    
+    excess_returns = returns - risk_free_rate / 252
+    downside_returns = excess_returns[excess_returns < 0]
+    
+    if len(downside_returns) == 0:
+        return np.inf
+        
+    downside_std = downside_returns.std()
+    
+    if downside_std == 0:
+        return np.inf
+        
+    return np.sqrt(252) * (excess_returns.mean() / downside_std)
+
+
+def calculate_calmar_ratio(returns: pd.Series) -> float:
+    """Compute Calmar Ratio (Annualized Return / Max Drawdown)."""
+    if returns.empty:
+        return 0.0
+        
+    max_dd = abs(calculate_max_drawdown(returns))
+    if max_dd == 0:
+        return 0.0 # or inf, but 0 is safer for plotting
+        
+    # Annualized return
+    # If returns are daily log returns, mean * 252 is approx annual log return
+    ann_return = returns.mean() * 252
+    
+    return ann_return / max_dd
+
+
+def calculate_profit_factor(returns: pd.Series) -> float:
+    """Compute Profit Factor (Gross Profit / Gross Loss)."""
+    if returns.empty:
+        return 0.0
+        
+    profits = returns[returns > 0].sum()
+    losses = abs(returns[returns < 0].sum())
+    
+    if losses == 0:
+        return np.inf if profits > 0 else 0.0
+        
+    return profits / losses
 
 
 def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
@@ -65,17 +115,14 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
     recall = recall_score(y_true_bin, y_pred_bin, zero_division=0)
     f1 = f1_score(y_true_bin, y_pred_bin, zero_division=0)
     
-    # Sharpe Ratio of the STRATEGY (assuming we trade based on prediction sign)
-    # Simple strategy: if pred > 0 buy, else sell/hold. 
-    # Here we just compute Sharpe of the *predicted* returns to see if the model 
-    # captures the distribution properties, OR more commonly, 
-    # we compute the Sharpe of a portfolio that follows the model's signals.
-    # For this stage (Baselines), we'll just return the Sharpe of the y_true 
-    # to show we can calculate it, or maybe the Sharpe of the residuals?
-    # Actually, usually we want to know: "If I followed this model, what would be my Sharpe?"
-    # Strategy Return = sign(y_pred) * y_true (simplified)
+    # Sharpe Ratio of the STRATEGY
+    # Strategy: if pred > 0 buy, else sell/hold.
+    # We compute the Sharpe of a portfolio that follows the model's signals.
     strategy_returns = np.sign(y_pred) * y_true
     strategy_sharpe = calculate_sharpe_ratio(strategy_returns)
+    strategy_sortino = calculate_sortino_ratio(strategy_returns)
+    strategy_calmar = calculate_calmar_ratio(strategy_returns)
+    profit_factor = calculate_profit_factor(strategy_returns)
     max_dd = calculate_max_drawdown(strategy_returns)
 
     return {
@@ -88,6 +135,9 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
         "Recall": recall,
         "F1": f1,
         "Strategy Sharpe": strategy_sharpe,
+        "Strategy Sortino": strategy_sortino,
+        "Strategy Calmar": strategy_calmar,
+        "Profit Factor": profit_factor,
         "Max Drawdown": max_dd,
         "IC": y_true.corr(y_pred) # Information Coefficient (Pearson)
     }
@@ -105,3 +155,22 @@ def print_eval(metrics: Dict[str, float], model_name: str = "Model"):
     print(f"IC:   {metrics['IC']:.4f} (Information Coefficient)")
     print(f"Sharpe: {metrics['Strategy Sharpe']:.4f} (Annualized Strategy Return)")
     print(f"Max Drawdown: {metrics['Max Drawdown']:.4f}")
+
+
+def evaluate_classification(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
+    """Compute classification metrics."""
+    # Ensure inputs are valid
+    if y_true.empty or y_pred.empty:
+        return {}
+        
+    acc = np.mean(y_true == y_pred)
+    prec = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    rec = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+    
+    return {
+        "Accuracy": acc,
+        "Precision": prec,
+        "Recall": rec,
+        "F1": f1
+    }

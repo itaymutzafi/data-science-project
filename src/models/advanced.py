@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from .base import BaseModel
 
 class LSTMModel(nn.Module):
     def __init__(self, input_size: int, hidden_size: int = 64, num_layers: int = 2, output_size: int = 1, dropout: float = 0.2):
@@ -30,7 +31,7 @@ class LSTMModel(nn.Module):
         out = self.fc(out[:, -1, :])
         return out
 
-class LSTMRegressor:
+class LSTMRegressor(BaseModel):
     """
     Scikit-learn compatible wrapper for PyTorch LSTM.
     Handles data preparation (sequences), training loop, and prediction.
@@ -91,14 +92,20 @@ class LSTMRegressor:
     def _create_sequences(self, data: np.ndarray, target: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Create sliding window sequences for training."""
         xs, ys = [], []
-        for i in range(len(data) - self.seq_length):
-            x = data[i:(i + self.seq_length)]
-            y_val = target[i + self.seq_length]
+        # Align X[i : i+seq] with y[i+seq-1].
+        # Using history up to T to predict target at T.
+        
+        for i in range(len(data) - self.seq_length + 1):
+            x = data[i : (i + self.seq_length)] # indices i to i+seq-1
+            # Assuming 'target' is already shifted (row T contains Return T->T+1)
+            # We want to predict Target[T] using X ending at T.
+            # So y index is i + seq_length - 1
+            y_val = target[i + self.seq_length - 1]
             xs.append(x)
             ys.append(y_val)
         return np.array(xs), np.array(ys)
 
-    def fit(self, X: pd.DataFrame, y: pd.Series):
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "LSTMRegressor":
         """Train the model on the provided series."""
         if self.model is None:
             self._init_model()
@@ -126,7 +133,7 @@ class LSTMRegressor:
         
         # DataLoader
         dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False) # Shuffle False for TS? Usually shuffle allowed for training sets if i.i.d assumption holds locally, but strict TS might prefer False. Let's keep False for safety in expanding window.
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=False) # Shuffle=False for time-series integrity
         
         # Training Loop
         for epoch in range(self.num_epochs):

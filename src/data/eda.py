@@ -54,5 +54,8 @@ def stock_split_table(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             for dt, val in s.items():
                 rows.append({"Ticker": ticker, "Date": dt, "Split Factor": val})
 
+    if not rows:
+        return pd.DataFrame(columns=["Ticker", "Date", "Split Factor"])
+
     out = pd.DataFrame(rows).sort_values(["Date", "Ticker"])
     return out.reset_index(drop=True)

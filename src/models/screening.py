@@ -15,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 
 from src.evaluation.metrics import evaluate_regression
 from src.models import baselines
-from src.models.lstm import LSTMRegressor
+from src.models.advanced import LSTMRegressor
 
 
 @dataclass
@@ -84,24 +84,15 @@ def get_model_candidates(input_size: int) -> Dict[str, object]:
     Define the model zoo to be evaluated.
 
     To add a new model, extend the returned dictionary with a new key/value pair.
-    For example: ``models[\"XGBoost\"] = XGBRegressor(...)``.
-
-    Args:
-        input_size: Number of input features (used by sequence models such as LSTM).
-
-    Returns:
-        Mapping of model name to an unfitted estimator instance.
     """
+    from .registry import get_model
+    
     models: Dict[str, object] = {
-        "NaiveBaseline": baselines.NaiveBaseline(strategy="zero"),
-        "Ridge": Ridge(alpha=1.0),
-        "RandomForest": RandomForestRegressor(
-            n_estimators=200,
-            random_state=42,
-            n_jobs=-1,
-            max_depth=None,
-        ),
-        "LSTM": LSTMRegressor(
+        "NaiveBaseline": get_model("NaiveBaseline", strategy="zero"),
+        "Ridge": get_model("Ridge", alpha=1.0),
+        "RandomForest": get_model("RandomForest", n_estimators=200, random_state=42, n_jobs=-1, max_depth=None),
+        "LSTM": get_model(
+            "LSTM",
             input_size=input_size,
             hidden_size=64,
             num_layers=2,
@@ -179,27 +170,32 @@ def _evaluate_models(
 
 
 def run_screening(
-    df: pd.DataFrame,
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
     tickers: Iterable[str],
     target_col: str = "Target",
     n_splits: int = 5,
     models: Optional[Dict[str, object]] = None,
+    perform_scaling: bool = True,
 ) -> ScreeningArtifacts:
     """
     Execute walk-forward validation with per-split scaling and multiple models.
 
     Args:
-        df: Full dataset containing all tickers and features.
+        df: Full dataset (DataFrame or Dict of DataFrames).
         tickers: Iterable of ticker symbols to evaluate.
         target_col: Name of the target column.
         n_splits: Number of folds for TimeSeriesSplit.
-        models: Optional pre-instantiated model dictionary. If None, defaults to get_model_candidates.
+        models: Optional pre-instantiated model dictionary.
+        perform_scaling: Whether to fit/transform StandardScaler inside the loop.
+                         Set to False if input is already scaled.
 
     Returns:
         ScreeningArtifacts with aggregated metrics and the final validation artifacts.
     """
-    _validate_input(df, target_col=target_col)
-
+    # Validation logic update for Dict
+    if isinstance(df, pd.DataFrame):
+        _validate_input(df, target_col=target_col)
+    
     records: List[Dict[str, float]] = []
     best_model_artifact: object | None = None
     last_X_val: pd.DataFrame | None = None
@@ -208,7 +204,13 @@ def run_screening(
     last_feature_cols: List[str] = []
 
     for ticker in tickers:
-        df_t = df[df["Ticker"] == ticker].dropna(subset=[target_col]).sort_index()
+        # Support Dict or DataFrame input
+        if isinstance(df, dict):
+            if ticker not in df: continue
+            df_t = df[ticker].dropna(subset=[target_col]).sort_index()
+        else:
+            df_t = df[df["Ticker"] == ticker].dropna(subset=[target_col]).sort_index()
+            
         if df_t.empty:
             continue
 
@@ -224,17 +226,22 @@ def run_screening(
             if X_train_raw.empty or X_val_raw.empty:
                 continue
 
-            scaler = StandardScaler()
-            X_train_scaled = pd.DataFrame(
-                scaler.fit_transform(X_train_raw),
-                index=X_train_raw.index,
-                columns=feature_cols,
-            )
-            X_val_scaled = pd.DataFrame(
-                scaler.transform(X_val_raw),
-                index=X_val_raw.index,
-                columns=feature_cols,
-            )
+            if perform_scaling:
+                scaler = StandardScaler()
+                X_train_scaled = pd.DataFrame(
+                    scaler.fit_transform(X_train_raw),
+                    index=X_train_raw.index,
+                    columns=feature_cols,
+                )
+                X_val_scaled = pd.DataFrame(
+                    scaler.transform(X_val_raw),
+                    index=X_val_raw.index,
+                    columns=feature_cols,
+                )
+            else:
+                scaler = None
+                X_train_scaled = X_train_raw
+                X_val_scaled = X_val_raw
 
             trained_models = _train_models(X_train_scaled, y_train, feature_cols, preset=models)
             fold_records = _evaluate_models(
@@ -276,16 +283,24 @@ def run_screening(
 
 
 def run_walk_forward_screening(
-    df: pd.DataFrame,
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
     tickers: Iterable[str],
     target_col: str = "Target",
     n_splits: int = 5,
     models: Optional[Dict[str, object]] = None,
+    perform_scaling: bool = True,
 ) -> ScreeningArtifacts:
     """
     Backwards-compatible alias for run_screening.
     """
-    return run_screening(df=df, tickers=tickers, target_col=target_col, n_splits=n_splits, models=models)
+    return run_screening(
+        df=df, 
+        tickers=tickers, 
+        target_col=target_col, 
+        n_splits=n_splits, 
+        models=models,
+        perform_scaling=perform_scaling
+    )
 
 
 __all__ = ["run_screening", "run_walk_forward_screening", "ScreeningArtifacts"]

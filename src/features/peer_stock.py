@@ -16,16 +16,6 @@ def add_peer_stock_features(dfs: Dict[str, pd.DataFrame], columns_to_merge: List
 
     print(f"{added}: Added Peer Stock feature")
 
-def save_merged_df_to_file(df: pd.DataFrame, ticker_name: str) -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    cache_dir = project_root / "data" / "raw"
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    output_filename = f"merged_{ticker_name}"
-    cache_path = cache_dir / output_filename
-    
-    df.to_parquet(cache_path)
-    print(f"Merged data saved to: {cache_path}")
-
 def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: Dict[str, pd.DataFrame], columns: List[str]) -> pd.DataFrame:
     res_df = main_df.copy()
 
@@ -48,7 +38,6 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
         res_df = res_df.join(feature_df_selected, how="left")
         print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
        
-    save_merged_df_to_file(res_df, ticker_name)
     return res_df
 
 def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: str) -> None:

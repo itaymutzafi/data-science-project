@@ -1,6 +1,6 @@
 """Preprocessing utilities for the stock prediction pipeline."""
 
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -83,6 +83,109 @@ class TimeSeriesScaler:
         return transformed
 
 
+class MultiTickerScaler:
+    """
+    Scales a dictionary of DataFrames using a shared scaler fitted ONLY on training data.
+    Prevents data leakage by respecting time boundaries.
+    """
+    
+    def __init__(self, scaler_type: str = "standard"):
+        self.scaler = StandardScaler() if scaler_type == "standard" else None
+        self.columns: Optional[List[str]] = None
+        self._fitted = False
+        
+    def fit(self, dfs: Dict[str, pd.DataFrame], train_end_date: str, columns: Optional[List[str]] = None) -> "MultiTickerScaler":
+        """
+        Fits the scaler on the concatenated training partition of all tickers.
+        """
+        train_parts = []
+        
+        for ticker, df in dfs.items():
+            # Slice training data (up to cutoff)
+            if not isinstance(df.index, pd.DatetimeIndex):
+                # Attempt to set index if 'date' or 'Date' exists, else assume index is date
+                if 'Date' in df.columns: df = df.set_index('Date')
+                elif 'date' in df.columns: df = df.set_index('date')
+                
+            # Sort to be safe
+            df = df.sort_index()
+            
+            # Select columns
+            if columns is None:
+                numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            else:
+                numeric_cols = columns
+                
+            self.columns = numeric_cols
+            
+            # Filter by date
+            train_subset = df.loc[:train_end_date, self.columns]
+            train_parts.append(train_subset)
+            
+        if not train_parts:
+            raise ValueError("No training data found to fit scaler.")
+            
+        # Concatenate all training data to learn global stats
+        full_train = pd.concat(train_parts)
+        self.scaler.fit(full_train)
+        self._fitted = True
+        return self
+
+    def transform(self, dfs: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
+        """
+        Transforms all DataFrames in the dictionary using the fitted scaler.
+        """
+        if not self._fitted:
+            raise RuntimeError("Scaler must be fitted before transform.")
+            
+        scaled_dfs = {}
+        for ticker, df in dfs.items():
+            df_copy = df.copy()
+            # Ensure index alignment
+            
+            # transform
+            df_copy[self.columns] = self.scaler.transform(df_copy[self.columns])
+            scaled_dfs[ticker] = df_copy
+            
+        return scaled_dfs
+
+from .indicators import TechnicalIndicators
+
+def add_technical_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Applies a standard suite of technical indicators to the DataFrame.
+    """
+    df = df.copy()
+    
+    # Ensure required columns exist
+    required = {'Close', 'High', 'Low', 'Volume'}
+    if not required.issubset(df.columns):
+        return df # Or raise error
+        
+    close = df['Close']
+    high = df['High']
+    low = df['Low']
+    volume = df['Volume']
+    
+    # 1. Moving Averages
+    df['MA20'] = TechnicalIndicators.calculate_moving_average(close, window=20)
+    df['MA50'] = TechnicalIndicators.calculate_moving_average(close, window=50)
+    
+    # 2. Momentum
+    df['RSI'] = TechnicalIndicators.calculate_rsi(close, window=14)
+    macd_df = TechnicalIndicators.calculate_macd(close)
+    df = pd.concat([df, macd_df], axis=1)
+    
+    # 3. Volatility
+    bb_df = TechnicalIndicators.calculate_bollinger_bands(close)
+    df = pd.concat([df, bb_df], axis=1)
+    df['ATR'] = TechnicalIndicators.calculate_atr(high, low, close)
+    
+    # 4. Volume
+
+    df['Vol20'] = close.pct_change().rolling(20).std()
+    
+    return df
 def create_sequences(
     data: pd.DataFrame | np.ndarray,
     target: pd.Series | np.ndarray,

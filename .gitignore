@@ -15,10 +15,10 @@ env/
 # Jupyter Notebooks
 .ipynb_checkpoints/
 *-checkpoint.ipynb
-playground_modeling.ipynb
+
 
 # Data
-data/*
+# data/*
 
 # Testing
 .pytest_cache/
@@ -28,3 +28,12 @@ htmlcov/
 
 # Environment
 .env
+
+# Project Artifacts
+notebook_map.txt
+reports/figures/
+reports/metrics/
+experiment_run.log
+
+# Large Data
+/data/

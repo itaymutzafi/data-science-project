@@ -129,7 +129,8 @@ def build_final_dataset(
     end_date=None,
     use_cache: bool = True,
     cache_path: Path | None = None,
-) -> pd.DataFrame:
+    return_dict: bool = False,
+) -> pd.DataFrame | Dict[str, pd.DataFrame]:
     """
     Build the full feature matrix: price + technical indicators + sentiment + target.
 
@@ -139,10 +140,10 @@ def build_final_dataset(
         end_date: End date for historical pull.
         use_cache: Whether to read/write a cached parquet.
         cache_path: Optional override for cache location.
+        return_dict: If True, returns Dict[Ticker, DataFrame] and skips monolithic caching.
 
     Returns:
-        pd.DataFrame containing OHLCV, technical indicators, sentiment features,
-        ticker labels, Log_Return, and Target (Log_Return).
+        pd.DataFrame or Dict containing OHLCV, technical indicators, sentiment features.
     """
     cache_path = cache_path or DEFAULT_CACHE_PATH
     cache_path = Path(cache_path)
@@ -151,7 +152,8 @@ def build_final_dataset(
     if not raw_dir.exists() and not processed_dir.exists():
         print("Warning: Local data directories not found (data/raw, data/processed). Attempting to fetch/generate data...")
 
-    if use_cache and cache_path.exists():
+    # Cache logic only applies to the monolithic DataFrame
+    if use_cache and cache_path.exists() and not return_dict:
         return pd.read_parquet(cache_path)
 
     start_date = start_date or config.START_DATE
@@ -162,6 +164,8 @@ def build_final_dataset(
     sentiment_columns = _collect_sentiment_columns(sentiment_all)
 
     processed_frames = []
+    processed_dict = {}
+    
     ticker_to_company = config.TICKER_TO_COMPANY_MAP
     for ticker in tickers:
         company_name = ticker_to_company.get(ticker, ticker)
@@ -181,7 +185,14 @@ def build_final_dataset(
         df_imputed = df_merged.copy()
         df_imputed[feature_columns] = df_imputed[feature_columns].ffill()
         df_clean = df_imputed.dropna(subset=feature_columns + ["Target"])
-        processed_frames.append(df_clean)
+        
+        if return_dict:
+            processed_dict[ticker] = df_clean
+        else:
+            processed_frames.append(df_clean)
+
+    if return_dict:
+        return processed_dict
 
     if not processed_frames:
         raise ValueError("No data available to build the final dataset.")

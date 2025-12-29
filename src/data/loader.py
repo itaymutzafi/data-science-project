@@ -31,32 +31,19 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
         # Ensure index is timezone-naive for consistency
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
-        
-        # Check if cached data covers the requested date range
-        # Note: Stock data doesn't include weekends/holidays, so we check if cached data
-        # has entries that cover the requested period
+
         cached_start = df.index.min().date()
         cached_end = df.index.max().date()
         
-        # Allow tolerance for weekends/holidays (up to 5 days difference)
-        # Stock markets are typically closed on weekends, so a few days difference is normal
-        tolerance_days = 5
-        
-        # Check if cached data covers the requested range:
-        # 1. Cached start should be before or close to requested start (within tolerance)
-        #    If cached_start is after start_time, allow up to tolerance_days difference
-        # 2. Cached end should be after or close to requested end (within tolerance)
-        #    If cached_end is before end_time, allow up to tolerance_days difference
+        # Check coverage with tolerance for market holidays/weekends
         start_diff = (start_time - cached_start).days
         end_diff = (end_time - cached_end).days
         
-        # Start is covered if cached_start <= start_time OR if the difference is small (within tolerance)
-        start_covered = abs(start_diff) <= tolerance_days
-        # End is covered if cached_end >= end_time OR if the difference is small (within tolerance)
-        end_covered = abs(end_diff) <= tolerance_days
+        start_covered = abs(start_diff) <= 5
+        end_covered = abs(end_diff) <= 5
         
         if start_covered and end_covered:
-            print(f"It didn't fetch nothing new - {ticker_name} data already covers requested range ({start_time} to {end_time})")
+            print(f"Data for {ticker_name} is up-to-date (covers {start_time} to {end_time}). Using cached data.")
             return df
         else:
             # Need to fetch new data - calculate years
@@ -119,13 +106,7 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
     # 2. Download from yfinance
     print("Fetching auxiliary market data from yfinance...")
     try:
-        # Download data
-        # Note: auto_adjust=True is default in newer yfinance, so 'Close' is adjusted.
-        # If start_date/end_date are None, yfinance defaults to max or similar, 
-        # but for auxiliary data we usually want a broad range or matching the main data.
-        # Here we'll default to a reasonable period if not specified, or let yfinance handle it.
-        # However, yf.download without start/end might be too much. 
-        # Let's use a default period if dates are missing, or just download everything.
+        # Download data (default to 5y if dates not specified to match sample data)
         
         tickers = list(AUX_TICKER_MAP.keys())
         if start_date and end_date:
@@ -156,12 +137,12 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
 
     
 def fetch_data_for_eda(start_time: date, end_time: date) -> Dict[str, pd.DataFrame]:
-    df_s = {}
+    stocks_data = {}
 
     for ticker in TICKERS:
         Ticker = yf.Ticker(ticker)
-        df_s[ticker] = fetch_sample_data(Ticker, start_time, end_time)
-    return df_s
+        stocks_data[ticker] = fetch_sample_data(Ticker, start_time, end_time)
+    return stocks_data
 
 
 def load_stock_data(path: Union[str, Path]) -> pd.DataFrame:

@@ -72,7 +72,7 @@ AUX_COLORS = {
 }
 
 # Sentiment Data
-RAW_NEWS_PATH = "data/raw/news_last_5y.csv"
+RAW_NEWS_PATH = "data/raw/news_last_5y.parquet"
 PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
 SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
 SAMPLES_PER_DAY = 1
