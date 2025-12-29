@@ -1,13 +1,24 @@
-"""LSTM Model implementation using PyTorch under the hood but exposing a scikit-learn like interface."""
+"""Advanced models implementation: LSTM (PyTorch), XGBoost, and Random Forest."""
 
-from typing import List, Optional, Tuple
-
+from typing import List, Optional, Tuple, Any, Dict
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from sklearn.ensemble import RandomForestClassifier
+
+# Optional XGBoost import
+try:
+    import xgboost as xgb
+    _XGB_AVAILABLE = True
+except ImportError:
+    import warnings
+    warnings.warn("XGBoost not installed. XGBoostRegressor will fail if used.")
+    _XGB_AVAILABLE = False
+
 from .base import BaseModel
+
 
 class LSTMModel(nn.Module):
     def __init__(self, input_size: int, hidden_size: int = 64, num_layers: int = 2, output_size: int = 1, dropout: float = 0.2):
@@ -194,3 +205,85 @@ class LSTMRegressor(BaseModel):
             
         pred_series = pd.Series(data=preds, index=pred_indices)
         return pred_series.reindex(X.index)
+
+
+class XGBoostRegressor(BaseModel):
+    """
+    XGBoost Regressor wrapper using the standard Scikit-Learn interface.
+    This class wraps the XGBRegressor to ensure compatibility with our BaseModel
+    and ExperimentRunner, using configuration logic derived from the project defaults.
+    """
+    def __init__(self, **kwargs):
+        """
+        Initialize the XGBoost model.
+        
+        Args:
+            **kwargs: Arguments passed directly to xgb.XGBRegressor.
+        
+        Raises:
+            ImportError: If XGBoost is not installed on the system.
+        """
+        if not _XGB_AVAILABLE:
+            raise ImportError("XGBoost is not installed. Please install it to use this model.")
+        
+        self.model = xgb.XGBRegressor(**kwargs)
+
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "XGBoostRegressor":
+        """
+        Fit the XGBoost model to the provided data.
+        """
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        """
+        Predict target values using the trained model.
+        """
+        preds = self.model.predict(X)
+        return pd.Series(preds, index=X.index)
+
+
+class RandomForestModel(BaseModel):
+    """
+    Random Forest Classifier wrapper.
+    Configured by default to match the high-performance settings identified in previous experiments
+    (e.g., n_estimators=1000).
+    """
+    def __init__(
+        self, 
+        n_estimators: int = 1000, 
+        min_samples_split: int = 2, 
+        random_state: int = 1, 
+        **kwargs
+    ):
+        """
+        Initialize the Random Forest Classifier.
+        
+        Args:
+            n_estimators (int): Number of trees in the forest.
+            min_samples_split (int): The minimum number of samples required to split an internal node.
+            random_state (int): Seed for reproducibility.
+            **kwargs: Additional arguments passed to RandomForestClassifier.
+        """
+        self.model = RandomForestClassifier(
+            n_estimators=n_estimators, 
+            min_samples_split=min_samples_split, 
+            random_state=random_state, 
+            **kwargs
+        )
+
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "RandomForestModel":
+        """
+        Fit the Random Forest model.
+        Note: Since this is a classifier, the target 'y' should be appropriate for classification 
+        (e.g., binary labels or integers).
+        """
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        """
+        Predict class labels.
+        """
+        preds = self.model.predict(X)
+        return pd.Series(preds, index=X.index)

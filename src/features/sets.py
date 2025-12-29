@@ -117,25 +117,47 @@ def get_feature_buckets() -> Dict[str, List[str]]:
         "MACRO": MACRO_FEATURES
     }
 
-def generate_diverse_combinations(n: int = 10) -> Dict[str, List[str]]:
-    """Generates N random combinations, picking one from each bucket."""
+
+# Logical Blocks for Coherent Feature Selection
+LOGICAL_BLOCKS = {
+    "Trend": ["MA20", "MA50"],  # Moving Averages pair well
+    "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"], # MACD needs its signal
+    "Oscillator": ["RSI"],
+    "Volatility": ["ATR", "Bollinger_Upper", "Bollinger_Lower"],
+    "Sentiment": ["sentiment_mean", "news_count"], # Basic sentiment
+    # "Sentiment_Advanced": ["sentiment_ma_7d", "sentiment_volatility_7d"], # Exclude if not confident they exist in df
+    "Macro": ["VIX_Index", "Treasury_10Y"]
+}
+
+def generate_diverse_combinations(n: int = 20) -> Dict[str, List[str]]:
+    """Generates N random combinations using Logical Blocks strategy."""
     import random
-    buckets = get_feature_buckets()
+    
     combinations = {}
+    block_names = list(LOGICAL_BLOCKS.keys())
+    
+    # Base features that should likely always be present for context
+    base_features = ["Open", "Close", "Volume", "Log_Return"]
     
     for i in range(n):
-        combo = []
-        # Always include Log_Return lag as base? Let's stick to buckets.
-        # Pick 1 from each
-        for category, features in buckets.items():
-            if features:
-                combo.append(random.choice(features))
+        # 1. Select random number of blocks (e.g., 2 to 4 blocks)
+        num_blocks = random.randint(2, 4)
         
-        # Add Log_Return explicitly if not in bucket (usually standard regressor)
-        if "Log_Return" not in combo:
-            combo.append("Log_Return")
+        # 2. Sample blocks without replacement
+        selected_block_names = random.sample(block_names, num_blocks)
+        
+        # 3. Flatten features
+        combo = list(base_features) # Start with base
+        for name in selected_block_names:
+            combo.extend(LOGICAL_BLOCKS[name])
             
-        combinations[f"DIVERSE_RND_{i+1}"] = list(set(combo))
+        # 4. Remove potential duplicates and ensure valid list
+        combo = list(set(combo))
+        
+        # Create descriptive name
+        # e.g. "RND_Trend_Momentum"
+        name_suffix = "_".join([name[:4] for name in selected_block_names])
+        combinations[f"BLOCKS_{i+1}_{name_suffix}"] = combo
         
     return combinations
 

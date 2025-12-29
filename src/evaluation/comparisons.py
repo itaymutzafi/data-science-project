@@ -92,12 +92,16 @@ def plot_risk_return_scatter(
     
     plt.figure(figsize=(10, 8))
     
+    # Logic to handle too many feature sets for 'style' mapping
+    unique_fsets = agg_df['FeatureSet'].nunique()
+    use_style = 'FeatureSet' if unique_fsets <= 10 else None
+    
     scatter = sns.scatterplot(
         data=agg_df,
         x='Directional Accuracy',
         y='Strategy Sharpe',
         hue='Model',
-        style='FeatureSet',
+        style=use_style,
         s=150,
         palette='deep',
         alpha=0.8
