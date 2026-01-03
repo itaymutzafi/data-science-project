@@ -44,7 +44,7 @@ def return_day_boxplot(dfs: Dict[str, pd.DataFrame]) -> None:
         ax.set_xticks([i * (len(TICKERS) + 1) + (len(TICKERS) - 1) / 2 for i in range(len(DAYNAMES))])
         ax.set_xticklabels(DAYNAMES, rotation=45)
         ax.set_ylabel('Return')
-        ax.set_title('Return Distribution by Day of Weekß')
+        ax.set_title('Return Distribution by Day of Week')
         ax.grid(True, axis='y', alpha=0.3)
         
         legend_elements = [Patch(facecolor=COMPANY_COLORS[name], alpha=0.7, label=name) for name in TICKERS]

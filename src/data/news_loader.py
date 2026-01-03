@@ -14,16 +14,13 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
-from src.config import START_DATE, END_DATE, TICKER_TO_COMPANY_MAP
+from src.config import START_DATE, END_DATE, TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH
 
 
 # Access Token since the dataset is protected, insert here or in .env
 # login(os.getenv("HF_TOKEN"))
 
-YEARS_BACK = 5
-FOLDER = "data/raw/"
-OUTPUT_FILE = f"{FOLDER}news_last_{YEARS_BACK}y.parquet"
-OUTPUT_XLSX = f"{FOLDER}news_last_{YEARS_BACK}y.xlsx"
+OUTPUT_XLSX = "data/raw/news_last_5y.xlsx"
 DATASET = "Brianferrell787/financial-news-multisource"
 
 DATA_FILE_FORMAT = "data/{0}/*.parquet"
@@ -136,7 +133,7 @@ def main():
         rows.append(out_row)
 
     news_df = pd.DataFrame(rows)
-    news_df.to_parquet(OUTPUT_FILE, index=False)
+    news_df.to_parquet(RAW_NEWS_PATH, index=False)
 
     print("\n--- SUMMARY ---")
     print("Total rows scanned:", rows_scanned)

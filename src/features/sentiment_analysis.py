@@ -19,7 +19,7 @@ import torch
 from transformers import pipeline
 from tqdm import tqdm
 
-from src.config import TICKER_TO_COMPANY_MAP
+from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SAMPLES_PER_DAY
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.evaluation import plots
 
@@ -508,3 +508,11 @@ def integrate_sentiment_data(stock_df: pd.DataFrame, news_data: pd.DataFrame, **
     lagged = lagged.reindex(stock_df.index)
     
     return stock_df.join(lagged).fillna(0)  # Fill NaNs with 0 (Neutral/No News)
+
+
+def get_config():
+    print(f""" Sentiment Analysis Configuration:
+    - Raw News Path: {RAW_NEWS_PATH}
+    - Output Cache: {SENTIMENT_CACHE}
+    - Samples Per Day: {SAMPLES_PER_DAY}
+    """)
