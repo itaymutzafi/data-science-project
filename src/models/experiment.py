@@ -9,17 +9,39 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-import pandas as pd
 import numpy as np
-from tqdm import tqdm
+import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
+from src.evaluation import metrics
 from src.features import sets, targets
 from src.models import registry
-from src.evaluation import metrics
 
 logger = logging.getLogger(__name__)
+
+# Explicit allow-lists to prevent regressors from entering classification runs (and vice-versa)
+CLASSIFICATION_MODELS = {
+    "LogisticRegression",
+    "RandomForestClassifier",
+    "XGBClassifier",
+}
+
+REGRESSION_MODELS = {
+    "Ridge",
+    "SVR",
+    "RandomForest",
+    "RandomForest_Deep",
+    "XGBRegressor",
+    "XGB_Conservative",
+    "XGB_Aggressive",
+    "LSTM",
+    "NaiveBaseline",
+    "RandomBaseline",
+    "MarketBenchmark",
+    "CAPMBaseline",
+}
 
 
 @dataclass
@@ -121,28 +143,26 @@ class ExperimentRunner:
         Returns:
             bool: True if compatible, False otherwise.
         """
-        is_classification = self.config.target_type in ['binary', 'multiclass']
-        
-        # Classification models
-        cls_models = {"LogisticRegression", "RandomForestClassifier", "XGBClassifier"}
-        # Regression models (explicit list to avoid ambiguity)
-        reg_models = {"Ridge", "SVR", "RandomForest", "RandomForest_Deep", 
-                      "XGB_Conservative", "XGB_Aggressive", "LSTM", "NaiveBaseline", 
-                      "RandomBaseline", "MarketBenchmark", "CAPMBaseline"}
+        target_type = self.config.target_type
+        is_classification = target_type in ["binary", "multiclass", "classification"]
 
         if is_classification:
-            if model_name in reg_models and model_name not in cls_models:
-                # Strictly skip regressors for classification tasks
-                return False
-        else:
-            if model_name in cls_models:
-                # Strictly skip classifiers for regression tasks
-                return False
-        
-        return True
+            return model_name in CLASSIFICATION_MODELS
+
+        # Default: regression / continuous
+        return model_name in REGRESSION_MODELS
 
     def run(self) -> None:
         """Execute the configured experiment grid."""
+        # Fail fast if the configured model list is incompatible with the chosen target type.
+        incompatible = [
+            m for m in self.config.models if not self._is_model_compatible(m)
+        ]
+        if incompatible:
+            raise ValueError(
+                f"Incompatible models for target_type '{self.config.target_type}': {incompatible}"
+            )
+
         iterator = itertools.product(
             self.config.tickers,
             self.config.feature_sets,
@@ -234,6 +254,9 @@ class ExperimentRunner:
             # Evaluate
             is_cls = self.config.target_type in ['binary', 'multiclass']
             if is_cls:
+                # Safety: ensure discrete labels even if a model returns floats
+                if np.issubdtype(preds_series.dtype, np.floating):
+                    preds_series = (preds_series > 0.5).astype(int)
                 fold_metrics = metrics.evaluate_classification(y_val, preds_series)
             else:
                 fold_metrics = metrics.evaluate_regression(y_val, preds_series)
