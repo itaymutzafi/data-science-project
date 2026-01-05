@@ -308,18 +308,23 @@ def process_sentiment_timeseries(df: pd.DataFrame) -> pd.DataFrame:
 def generate_daily_sentiment_features(
     news_path: str,
     output_path: Optional[str] = None,
-    n_sample_per_day: int = 5,
+    n_sample_per_day: int = SAMPLES_PER_DAY,
     cutoff_date: str = '2020-01-01',
     use_google_news: bool = False,
     force_compute: bool = False
 ) -> pd.DataFrame:
     """
     Main pipeline to generate daily sentiment features.
-    Handles loading, simple Google News patching (if enabled), text cleaning, scoring, and aggregation.
+    Handles loading, optional Google News patching (disabled by default), text cleaning, scoring, and aggregation.
+
+    Output (per company/date): sentiment_mean, sentiment_std, news_count, market_sentiment,
+    sentiment_ma_7d (trend), sentiment_momentum_3d, sentiment_volatility_7d, sentiment_trend (alias of MA7).
     """
-    if output_path and os.path.exists(output_path) and not force_compute:
-        logger.info(f"Loading cached sentiment: {output_path}")
-        df = pd.read_csv(output_path)
+    cache_path = output_path or SENTIMENT_CACHE
+
+    if cache_path and os.path.exists(cache_path) and not force_compute:
+        logger.info(f"Loading cached sentiment: {cache_path}")
+        df = pd.read_csv(cache_path)
         df['date'] = pd.to_datetime(df['date'])
         return df
 
@@ -347,12 +352,12 @@ def generate_daily_sentiment_features(
             gn_df = gn_df[gn_df['final_text'].str.len() > 3]
             df = pd.concat([df, gn_df], ignore_index=True)
 
-    # 3. Stratified Sampling
-    if n_sample_per_day > 0:
+    # 3. Stratified Sampling (optional)
+    raw_counts = None
+    if n_sample_per_day and n_sample_per_day > 0:
         logger.info(f"Sampling {n_sample_per_day} items per day/company...")
         # Capture raw counts first
         raw_counts = df.groupby(['date', 'company']).size().reset_index(name='news_count_raw')
-        
         df = df.sample(frac=1, random_state=42).groupby(['date', 'company']).head(n_sample_per_day)
     
     # 4. Analysis
@@ -363,7 +368,7 @@ def generate_daily_sentiment_features(
     agg = analyzer.aggregate_daily(scored)
     
     # Restore true counts if sampled
-    if n_sample_per_day > 0:
+    if raw_counts is not None:
         agg = agg.drop(columns=['news_count']).merge(
             raw_counts.rename(columns={'news_count_raw': 'news_count'}), 
             on=['date', 'company'], 
@@ -372,8 +377,8 @@ def generate_daily_sentiment_features(
         
     final_df = process_sentiment_timeseries(agg)
     
-    if output_path:
-        final_df.to_csv(output_path, index=False)
+    if cache_path:
+        final_df.to_csv(cache_path, index=False)
         
     return final_df
 
@@ -424,7 +429,7 @@ def run_sentiment_pipeline_for_report(stock_df: pd.DataFrame, config_obj: Any) -
         news_path=config_obj.RAW_NEWS_PATH,
         output_path=config_obj.SENTIMENT_CACHE,
         n_sample_per_day=config_obj.SAMPLES_PER_DAY,
-        use_google_news=True,
+        use_google_news=False,  # offline-safe default; enable explicitly if needed
         force_compute=getattr(config_obj, 'force_sentiment_compute', False)
     )
 
@@ -467,47 +472,97 @@ def verify_unified_data(stock_df: pd.DataFrame, company_name: str):
         print(f"Found {len(sample)} days with active news.")
         print(sample[cols + ['Close']].head())
 
-def integrate_sentiment_data(stock_df: pd.DataFrame, news_data: pd.DataFrame, **kwargs) -> pd.DataFrame:
+def integrate_sentiment_data(
+    stock_df: pd.DataFrame,
+    news_data: pd.DataFrame,
+    *,
+    company_name: str | None = None,
+    sentiment_columns: Optional[List[str]] = None,
+    lag: int = 1,
+    include_advanced: bool = True,
+    add_alias_score: bool = True,
+) -> pd.DataFrame:
     """
-    Main integration function.
-    Merges sentiment features into stock data with 1-day lag.
-    """
-    # Simply left join if already processed, or run process if not
-    # In this new flow, we expect 'news_data' to be the OUTPUT of generate_daily_sentiment_features
-    # which is already aggregated and decayed.
+    Merge lagged sentiment features into a stock dataframe while avoiding same-day leakage.
     
+    Args:
+        stock_df: Price/feature dataframe indexed by date.
+        news_data: Output of generate_daily_sentiment_features (aggregated + decayed).
+        company_name: Optional explicit company name; otherwise derived from ticker if possible.
+        sentiment_columns: Explicit list of sentiment columns to include; defaults to all non-id columns.
+        lag: Days to shift sentiment features (default 1).
+        include_advanced: If False, keep only basic columns (mean/std/count/context/MA7/trend).
+        add_alias_score: If True and sentiment_mean_lag{lag} exists, set Sentiment_Score alias.
+    """
+    if lag < 0:
+        raise ValueError("lag must be non-negative")
+
+    # Copy and standardize
     sent_df = news_data.copy()
-    sent_df['date'] = pd.to_datetime(sent_df['date'])
-    
-    if not isinstance(stock_df.index, pd.DatetimeIndex):
-        stock_df.index = pd.to_datetime(stock_df.index)
-        
-    # 1. Company Matching (Resolve Ticker -> Name)
-    # If stock_df is single ticker, filter sent_df
-    target_company = None
-    if 'Symbol' in stock_df.columns:
-        res = TICKER_TO_COMPANY_MAP.get(stock_df['Symbol'].iloc[0])
-        if res: target_company = res
-        
-    if kwargs.get('company_name'):
-        target_company = kwargs['company_name']
-        
+    if 'date' in sent_df.columns:
+        sent_df['date'] = pd.to_datetime(sent_df['date'])
+    else:
+        raise ValueError("news_data must contain a 'date' column")
+
+    # Determine company
+    target_company = company_name
+    if target_company is None and 'Symbol' in stock_df.columns:
+        target_company = TICKER_TO_COMPANY_MAP.get(stock_df['Symbol'].iloc[0])
+
     if target_company:
         sent_df = sent_df[sent_df['company'].str.lower() == target_company.lower()]
-        
-    # 2. Lag Features
+
+    if sent_df.empty:
+        # Nothing to join; return with zeros for expected columns if provided
+        base = stock_df.copy()
+        if sentiment_columns:
+            lagged_cols = [f"{c}_lag{lag}" for c in sentiment_columns]
+            for c in lagged_cols:
+                base[c] = 0
+        return base
+
+    # Select columns
+    if sentiment_columns is None:
+        sentiment_columns = [c for c in sent_df.columns if c not in {'company', 'date'}]
+        if not include_advanced:
+            basic = {
+                'sentiment_mean',
+                'sentiment_std',
+                'news_count',
+                'market_sentiment',
+                'sentiment_ma_7d',
+                'sentiment_trend',
+            }
+            sentiment_columns = [c for c in sentiment_columns if c in basic]
+
+    # Time alignment and lag
     sent_df = sent_df.set_index('date').sort_index()
-    
-    cols = ['sentiment_mean', 'news_count', 'market_sentiment', 'sentiment_trend']
-    cols = [c for c in cols if c in sent_df.columns]
-    
-    lagged = sent_df[cols].shift(1).add_suffix('_lag1')
-    
-    # 3. Join
-    # reindex to ensure stock days
-    lagged = lagged.reindex(stock_df.index)
-    
-    return stock_df.join(lagged).fillna(0)  # Fill NaNs with 0 (Neutral/No News)
+    sent_df = sent_df[sentiment_columns]
+    lagged = sent_df.shift(lag).add_suffix(f"_lag{lag}")
+
+    # Align to stock index
+    merged = stock_df.copy()
+
+    # Drop overlapping lagged columns if they already exist to avoid pandas join errors
+    overlap = [c for c in lagged.columns if c in merged.columns]
+    if overlap:
+        logger.warning(f"Replacing existing sentiment columns on merge: {overlap}")
+        merged = merged.drop(columns=overlap)
+
+    if not isinstance(merged.index, pd.DatetimeIndex):
+        merged.index = pd.to_datetime(merged.index)
+    lagged = lagged.reindex(merged.index)
+    lagged = lagged.ffill()
+    merged = merged.join(lagged)
+    merged[lagged.columns] = merged[lagged.columns].fillna(0)
+
+    # Optional compatibility alias
+    if add_alias_score:
+        alias_col = f"sentiment_mean_lag{lag}"
+        if alias_col in merged.columns and "Sentiment_Score" not in merged.columns:
+            merged["Sentiment_Score"] = merged[alias_col]
+
+    return merged
 
 
 def get_config():

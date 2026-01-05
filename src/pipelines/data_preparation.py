@@ -13,7 +13,7 @@ import yfinance as yf
 from src import config
 from src.data import loader
 from src.features.indicators import TechnicalIndicators
-from src.features.sentiment_analysis import run_sentiment_pipeline_for_report
+from src.features.sentiment_analysis import integrate_sentiment_data, run_sentiment_pipeline_for_report
 
 
 DEFAULT_CACHE_PATH = config.PROCESSED_DATA_DIR / "final_dataset.parquet"
@@ -89,38 +89,20 @@ def _merge_with_sentiment(
     sentiment_df: pd.DataFrame,
     company_name: str,
     sentiment_columns: List[str],
+    lag: int = 1,
 ) -> pd.DataFrame:
     """
-    Left-join price data with sentiment for a specific company and preserve all sentiment columns.
-
-    Args:
-        price_df: Price and technical feature DataFrame for a single ticker.
-        sentiment_df: Full sentiment DataFrame covering all companies.
-        company_name: Company name that aligns with the sentiment data.
-        sentiment_columns: Columns to retain from the sentiment DataFrame.
-
-    Returns:
-        DataFrame with price, technical, and sentiment features aligned on the index.
+    Merge price data with lagged sentiment features for a specific company.
+    Relies on the shared integration helper to avoid same-day leakage and keep a consistent schema.
     """
-    price_aligned = price_df.copy()
-    price_aligned.index = pd.to_datetime(price_aligned.index)
-
-    # Ensure sentiment columns exist even if sentiment data is missing
-    if not sentiment_columns:
-        sentiment_columns = ["sentiment_mean", "news_count", "market_sentiment", "Sentiment_Score"]
-
-    sent_company = sentiment_df[sentiment_df["company"] == company_name].copy()
-    if not sent_company.empty:
-        sent_company["date"] = pd.to_datetime(sent_company["date"])
-        sent_company = sent_company.set_index("date").sort_index()
-        joined = price_aligned.join(sent_company[sentiment_columns], how="left")
-    else:
-        joined = price_aligned.copy()
-        for col in sentiment_columns:
-            joined[col] = np.nan
-
-    joined[sentiment_columns] = joined[sentiment_columns].ffill().fillna(0)
-    return joined
+    return integrate_sentiment_data(
+        price_df,
+        sentiment_df,
+        company_name=company_name,
+        sentiment_columns=sentiment_columns,
+        lag=lag,
+        include_advanced=True,
+    )
 
 
 def build_final_dataset(
@@ -173,10 +155,18 @@ def build_final_dataset(
         df_price.index = pd.to_datetime(df_price.index)
 
         df_with_indicators = _apply_indicators(df_price)
-        df_merged = _merge_with_sentiment(df_with_indicators, sentiment_all, company_name, sentiment_columns)
+        df_merged = _merge_with_sentiment(
+            df_with_indicators,
+            sentiment_all,
+            company_name,
+            sentiment_columns,
+            lag=1,
+        )
 
-        if "sentiment_mean" in df_merged.columns and "Sentiment_Score" not in df_merged.columns:
-            df_merged["Sentiment_Score"] = df_merged["sentiment_mean"]
+        if "Sentiment_Score" not in df_merged.columns:
+            alias_col = "sentiment_mean_lag1"
+            if alias_col in df_merged.columns:
+                df_merged["Sentiment_Score"] = df_merged[alias_col]
 
         df_merged["Target"] = df_merged["Log_Return"].shift(-1)
         df_merged["Ticker"] = ticker

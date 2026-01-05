@@ -49,7 +49,10 @@ def _validate_input(df: pd.DataFrame, target_col: str) -> None:
     candidate_features = [
         "Log_Return",
         "Sentiment_Score",
-        "sentiment_mean",
+        "sentiment_mean_lag1",
+        "news_count_lag1",
+        "market_sentiment_lag1",
+        "sentiment_trend_lag1",
         "RSI",
         "MACD",
         "ATR",

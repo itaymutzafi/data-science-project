@@ -365,7 +365,7 @@ def plot_sentiment_label_distribution(df: pd.DataFrame | Dict[str, pd.DataFrame]
 
 
 def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = "sentiment_mean_lag1", days: int | None = None) -> None:
-    """Plot price against sentiment series."""
+    """Plot price against sentiment series (expects lagged sentiment)."""
     set_style()
     if sentiment_col not in df.columns:
         print(f"Column '{sentiment_col}' not found. Skipping plot.")
@@ -394,10 +394,10 @@ def plot_sentiment_vs_price(df: pd.DataFrame, sentiment_col: str = "sentiment_me
 def plot_sentiment_vs_price_grid(
     df: pd.DataFrame | Dict[str, pd.DataFrame],
     tickers: List[str],
-    sentiment_col: str = "sentiment_mean",
+    sentiment_col: str = "sentiment_mean_lag1",
     days: int | None = None,
 ) -> None:
-    """2x2 grid overlaying price vs sentiment for multiple tickers."""
+    """2x2 grid overlaying price vs sentiment for multiple tickers (uses lagged sentiment)."""
     set_style()
     df = _ensure_dataframe(df)
 
@@ -409,7 +409,7 @@ def plot_sentiment_vs_price_grid(
     axes = axes.flatten()
 
     # Allow graceful fallback if requested sentiment_col is missing
-    sentiment_fallbacks = [sentiment_col, "sentiment_mean_lag1", "Sentiment_Score", "sentiment_mean"]
+    sentiment_fallbacks = [sentiment_col, "sentiment_mean_lag1", "Sentiment_Score"]
 
     for ax, ticker in zip(axes, tickers):
         subset = df[df["Ticker"] == ticker].sort_index()
@@ -452,8 +452,8 @@ def plot_sentiment_vs_price_grid(
     plt.show()
 
 
-def plot_sentiment_signal(df: pd.DataFrame, ticker: str, sentiment_col: str = "Sentiment_Score", days: int | None = None) -> None:
-    """Legacy-compatible wrapper to plot sentiment vs price for a single ticker."""
+def plot_sentiment_signal(df: pd.DataFrame, ticker: str, sentiment_col: str = "sentiment_mean_lag1", days: int | None = None) -> None:
+    """Wrapper to plot sentiment vs price for a single ticker using lagged sentiment."""
     subset = df[df["Ticker"] == ticker].copy()
     if subset.empty:
         print(f"No data for ticker {ticker}")
@@ -464,10 +464,10 @@ def plot_sentiment_signal(df: pd.DataFrame, ticker: str, sentiment_col: str = "S
 def plot_sentiment_summary(
     df: pd.DataFrame,
     ticker_col: str = "Ticker",
-    sentiment_col: str = "sentiment_mean",
+    sentiment_col: str = "sentiment_mean_lag1",
     window: int = 14,
 ) -> None:
-    """Plot smoothed sentiment trends across tickers."""
+    """Plot smoothed sentiment trends across tickers (expects lagged sentiment)."""
     set_style()
     if df.empty or sentiment_col not in df.columns or ticker_col not in df.columns:
         print("Sentiment summary requires sentiment and ticker columns.")
