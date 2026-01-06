@@ -6,6 +6,9 @@ import seaborn as sns
 
 from src.config import *
 
+PEER_FEATURES = {}
+MACRO_FEATURES = []# ["VIX_Index", "Treasury_10Y", "Nasdaq_100_Return"] append when adding to df not hard-coded
+
 def add_peer_stock_features(dfs: Dict[str, pd.DataFrame], columns_to_merge: List[str]) -> None:
     added = []
 
@@ -47,6 +50,7 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
 
         res_df = res_df.join(feature_df_selected, how="left")
         print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
+        PEER_FEATURES[ticker_name] = feature_df_selected
        
     return res_df
 

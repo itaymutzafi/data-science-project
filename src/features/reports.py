@@ -7,6 +7,8 @@ import yfinance as yf
 
 from src.config import *
 
+REPORT_FEATURE = ["Days To Nearest Report"]
+
 def plot_sec_fiilings_dates(reports_by_company):
     _, ax = plt.subplots(figsize=(12, 6))
     has_data = False

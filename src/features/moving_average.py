@@ -4,13 +4,16 @@ from typing import Dict, List
 
 from src.config import COMPANY_COLORS
 
+MA_FEATURES = []
+
 def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int]) -> None:
     added = []
 
     for name, df in dfs.items():
         if "Close" in df.columns:
             for win in windows:
-                df[f"MA{win}"] = df['Close'].rolling(win).mean().bfill()
+                df[f"MA{win}"] = df['Close'].rolling(win).mean()
+                MA_FEATURES.append(f"MA{win}")
             added.append(name)
 
     print(f"{added}: Added Moving Average with windows {windows} features")
@@ -27,8 +30,13 @@ def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
             ema_slow = df["Close"].ewm(span=slow, adjust=False).mean()
 
             df["MACD"] = ema_fast - ema_slow
+            MA_FEATURES.append("MACD")
+
             df["MACD_Signal"] = df["MACD"].ewm(span=signal, adjust=False).mean()
+            MA_FEATURES.append("MACD_Signal")
+
             df["MACD_Hist"] = df["MACD"] - df["MACD_Signal"]
+            MA_FEATURES.append("MACD_Hist")
 
             added.append(name)
 

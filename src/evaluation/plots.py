@@ -18,7 +18,6 @@ from src.config import (
     COMPANY_COLORS,
     DAYNAMES,
     MONTHNAMES,
-    TICKER,
     TICKERS,
     TICKER_TO_COMPANY_MAP,
 )

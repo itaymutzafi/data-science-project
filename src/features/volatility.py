@@ -1,9 +1,10 @@
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, List
 
-from src.config import COMPANY_COLORS, DAYNAMES, MONTHNAMES, TICKERS
+from src.config import COMPANY_COLORS
+
+VOL_FEATURE = []
 
 def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int]) -> None:
     added = []
@@ -11,7 +12,8 @@ def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int]) ->
     for name, df in dfs.items():
         if "Return" in df.columns:
             for win in windows:
-                df[f"Vol{win}"] = df['Return'].rolling(win).std().bfill()
+                df[f"Vol{win}"] = df['Return'].rolling(win).std()
+                VOL_FEATURE.append(f"Vol{win}")
             added.append(name)
 
     print(f"{added}: Added Volatility with windows {windows} features")

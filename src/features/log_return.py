@@ -7,13 +7,19 @@ from matplotlib.patches import Patch
 from src.utils import statistic_tests as st
 from src.config import COMPANY_COLORS, DAYNAMES, TICKERS
 
+RETURN_FEATURES = []
+
 def add_return_features(dfs: Dict[str, pd.DataFrame]) -> None:
     added = []
 
     for name, df in dfs.items():
         if "Close" in df.columns:
-            df['Return'] = df['Close'].pct_change().bfill()
-            df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1)).bfill()
+            df['Return'] = df['Close'].pct_change()
+            RETURN_FEATURES.append('Return')
+
+            df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
+            RETURN_FEATURES.append('Log_Return')
+
             added.append(name)
 
     print(f"{added}: Added Return and Log Return features")

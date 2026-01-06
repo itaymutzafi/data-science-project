@@ -23,6 +23,27 @@ from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SA
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.evaluation import plots
 
+# SENTIMENT_LEVEL_OPTIONS = [
+#     "sentiment_mean_lag1",
+#     "sentiment_ma_7d_lag1",
+# ]
+# SENTIMENT_TREND_OPTIONS = [
+#     "sentiment_trend_lag1",
+#     "sentiment_momentum_3d_lag1",
+# ]
+# SENTIMENT_VARIABILITY_OPTIONS = [
+#     "sentiment_volatility_7d_lag1",
+# ]
+# SENTIMENT_ACTIVITY_OPTIONS = [
+#     "news_count_lag1",
+# ]
+# MARKET_SENTIMENT_OPTIONS = [
+#     "market_sentiment_lag1",
+# ]
+# SENTIMENT_FEATURES = SENTIMENT_LEVEL_OPTIONS + SENTIMENT_TREND_OPTIONS + SENTIMENT_VARIABILITY_OPTIONS + \
+#                      SENTIMENT_ACTIVITY_OPTIONS +  MARKET_SENTIMENT_OPTIONS      
+# TODO: add Sentiment_Score, sentiment_std_lag1?        
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -268,7 +289,7 @@ def calculate_market_features(df: pd.DataFrame) -> pd.DataFrame:
         return (total - val) / (n - 1)
 
     df['market_sentiment'] = df.apply(get_context, axis=1)
-    
+
     # 2. Time Series Features per Company
     features = []
     for _, group in df.groupby('company'):

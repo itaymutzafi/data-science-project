@@ -149,43 +149,6 @@ class MultiTickerScaler:
             
         return scaled_dfs
 
-from .indicators import TechnicalIndicators
-
-def add_technical_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Applies a standard suite of technical indicators to the DataFrame.
-    """
-    df = df.copy()
-    
-    # Ensure required columns exist
-    required = {'Close', 'High', 'Low', 'Volume'}
-    if not required.issubset(df.columns):
-        return df # Or raise error
-        
-    close = df['Close']
-    high = df['High']
-    low = df['Low']
-    volume = df['Volume']
-    
-    # 1. Moving Averages
-    df['MA20'] = TechnicalIndicators.calculate_moving_average(close, window=20)
-    df['MA50'] = TechnicalIndicators.calculate_moving_average(close, window=50)
-    
-    # 2. Momentum
-    df['RSI'] = TechnicalIndicators.calculate_rsi(close, window=14)
-    macd_df = TechnicalIndicators.calculate_macd(close)
-    df = pd.concat([df, macd_df], axis=1)
-    
-    # 3. Volatility
-    bb_df = TechnicalIndicators.calculate_bollinger_bands(close)
-    df = pd.concat([df, bb_df], axis=1)
-    df['ATR'] = TechnicalIndicators.calculate_atr(high, low, close)
-    
-    # 4. Volume
-
-    df['Vol20'] = close.pct_change().rolling(20).std()
-    
-    return df
 def create_sequences(
     data: pd.DataFrame | np.ndarray,
     target: pd.Series | np.ndarray,

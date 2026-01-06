@@ -7,24 +7,42 @@ from pathlib import Path
 from datetime import date
 from calendar import month_name, day_name
 
-
+# Paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-PROCESSED_DATA_PATH = PROCESSED_DATA_DIR
+AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
+RAW_NEWS_PATH = "data/raw/news_last_5y.parquet"
+PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
+SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
 
-# Ticker to Company Name Mapping
-# Ensures consistency between stock data (Tickers) and News Data (Company Names)
+# Tickers / Companys
 TICKER_TO_COMPANY_MAP = {
     "AAPL": "Apple",
     "MSFT": "Microsoft",
     "AMZN": "Amazon",
     "GOOG": "Google",
 }
-
 COMPANY_TO_TICKERS_MAP = {v : k for k,v in TICKER_TO_COMPANY_MAP.items()}
-
 TICKERS = list(TICKER_TO_COMPANY_MAP.keys())
+
+# Time Range
+DAYNAMES = list(day_name)
+MONTHNAMES = list(month_name)[1:]
+START_DATE = date(2020, 1, 1)
+END_DATE = date(2025, 12, 3)
+
+# Features
+AUX_TICKER_MAP = {
+    'QQQ': 'Nasdaq_100',
+    '^VIX': 'VIX_Index',
+    '^TNX': 'Treasury_10Y',
+    'NVDA': 'NVIDIA_Segment_Leader'
+}
+SAMPLES_PER_DAY = 1
+
+# Models
+SEED = 42
 
 # Visualization Colors
 COMPANY_COLORS = {
@@ -39,40 +57,9 @@ COMPANY_COLORS = {
     "GOOGL": "#4285F4",
     "MSFT": "#F25022"
 }
-
-# Data Settings
-TICKER = "AAPL"
-BENCHMARK = "^GSPC"  # S&P 500
-LOOKBACK_WINDOW = 30
-TEST_SIZE = 0.2
-
-# Date Range (None implies dynamic fetching or full available history)
-DAYNAMES = list(day_name)
-MONTHNAMES = list(month_name)[1:]
-START_DATE = date(2020, 1, 1)
-END_DATE = date(2025, 12, 3)
-
-SEED = 42
-
-# --- Data Enrichment Config ---
-AUX_TICKER_MAP = {
-    'QQQ': 'Nasdaq_100',
-    '^VIX': 'VIX_Index',
-    '^TNX': 'Treasury_10Y',
-    'NVDA': 'NVIDIA_Segment_Leader'
-}
-AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
-
-# Auxiliary Feature Colors (Distinct from Company Colors)
 AUX_COLORS = {
     'Nasdaq_100': '#663399',          # RebeccaPurple (Rich, distinct index color)
     'VIX_Index': '#E0115F',           # Ruby (Distinct from Microsoft Red, signaling alert)
     'Treasury_10Y': '#708090',        # SlateGray (Neutral, bond-like)
     'NVIDIA_Segment_Leader': '#20B2AA' # LightSeaGreen (Distinct from Apple, tech-like)
 }
-
-# Sentiment Data
-RAW_NEWS_PATH = "data/raw/news_last_5y.parquet"
-PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
-SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
-SAMPLES_PER_DAY = 1

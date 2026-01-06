@@ -1,25 +1,25 @@
-"""
-Feature Set Definitions.
-
-Defines groups of features to be used in experimentation.
-"""
-
 from typing import List, Dict, Optional
+from src.features import RETURN_FEATURES, MA_FEATURES, VOL_FEATURE, REPORT_FEATURE, PEER_FEATURES, MACRO_FEATURES, TIME_FEATURES
 
-# 1. Price / Volume Only
-# Minimalist set, limited to columns that are actually built in the notebooks
-PRICE_FEATURES = [
-    "Open", "High", "Low", "Close", "Volume",
-    "Return", "Log_Return",
-]
+BASIC_FEATURES = ["Open", "High", "Low", "Close"]
+VOLUME_FEATURE = ["Volume"]
+DIV_FEATURE = ["Dividends"]
+SPLIT_FEATURE = ["Stock Splits"]
 
-# 2. Technical Indicators (built in notebook/pipeline)
-TECHNICAL_FEATURES = [
-    "MA20", "MA50",
-    "MACD", "MACD_Signal", "MACD_Hist",
-    "Vol20",
-    "Days To Nearest Report",
-]
+PRICE_FEATURES = BASIC_FEATURES + VOLUME_FEATURE + RETURN_FEATURES
+TECHNICAL_FEATURES = MA_FEATURES + VOL_FEATURE + REPORT_FEATURE
+
+# all columns in df:
+# ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits',
+#        'Day', 'Month', 'Return', 'Log_Return', 'Vol20', 'MA20', 'MA50', 'MACD',
+#        'MACD_Signal', 'MACD_Hist', 'MSFT - Close', 'MSFT - Volume',
+#        'MSFT - Log_Return', 'AMZN - Close', 'AMZN - Volume',
+#        'AMZN - Log_Return', 'GOOG - Close', 'GOOG - Volume',
+#        'GOOG - Log_Return', 'Days To Nearest Report', 'sentiment_mean_lag1',
+#        'news_count_lag1', 'market_sentiment_lag1', 'sentiment_trend_lag1',
+#        'Sentiment_Score']
+
+# TODO: according to ticker add PEER_FEATURES, sentiment
 
 # 3. Sentiment Features (lagged to avoid leakage)
 # Core set from the integrated sentiment pipeline
@@ -37,32 +37,11 @@ SENTIMENT_SMOOTHED = [
     "sentiment_volatility_7d_lag1",
 ]
 
-# 5. Macro / Auxiliary (to be generated in notebook)
-MACRO_FEATURES = [
-    "VIX_Index",
-    "Treasury_10Y",
-    "Nasdaq_100_Return",
-]
 
-# 5. Notebook Playground Set (Matches current generation)
-NOTEBOOK_FEATURES = [
-    "Open", "High", "Low", "Close", "Volume",
-    "Return", "Log_Return",
-    "MA20", "MA50",
-    "MACD", "MACD_Signal", "MACD_Hist",
-    "Vol20",
-    "Days To Nearest Report",
-    "sentiment_mean_lag1", "news_count_lag1", "market_sentiment_lag1", "sentiment_trend_lag1",
-    "sentiment_ma_7d_lag1", "sentiment_momentum_3d_lag1", "sentiment_volatility_7d_lag1",
-]
+ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES #+ TIME_FEATURES + PEER_FEATURES
 
-# 6. Grandmaster Set (The "Best" Combo)
-GRANDMASTER_FEATURES = list(set(
-    PRICE_FEATURES +
-    TECHNICAL_FEATURES +
-    SENTIMENT_FEATURES +
-    SENTIMENT_SMOOTHED
-))
+# Grandmaster Set (The "Best" Combo)
+GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED))
 
 # Combined Sets
 def get_feature_set(name: str) -> List[str]:
@@ -77,16 +56,12 @@ def get_feature_set(name: str) -> List[str]:
         return list(set(PRICE_FEATURES + TECHNICAL_FEATURES))
     elif name == "PRICE_SENTIMENT":
         return list(set(PRICE_FEATURES + SENTIMENT_FEATURES))
-    elif name == "MOMENTUM":
-        return MOMENTUM_FEATURES
     elif name == "SENTIMENT_SMOOTHED":
         return SENTIMENT_SMOOTHED
     elif name == "GRANDMASTER":
         return GRANDMASTER_FEATURES
-    elif name == "NOTEBOOK_FEATURES":
-        return NOTEBOOK_FEATURES
     elif name == "ALL":
-        all_feats = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES
+        all_feats = ALL_FEATURES
         return list(set(all_feats))
     else:
         # Check if it's a generated random set (handled by caller, but if passed as list, we might need logic)
@@ -172,8 +147,7 @@ def generate_random_subspaces(
     # Pool of all available features (excluding potential targets if known, but here we list inputs)
     # We exclude 'Log_Return' from the pool if it's treated as target, but usually lag is fine.
     # Let's ensure we have a broad pool.
-    pool = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + MACRO_FEATURES + 
-                    MOMENTUM_FEATURES + VOLATILITY_FEATURES + SENTIMENT_SMOOTHED))
+    pool = list(set(ALL_FEATURES))
     
     # Remove duplicates
     pool = list(set(pool))

@@ -143,7 +143,7 @@ def run_full_experiment(
     # 5. Combine and Save
     all_results = pd.concat([reg_results, cls_results], ignore_index=True)
     
-    output_path = config.PROCESSED_DATA_PATH / output_file
+    output_path = config.PROCESSED_DATA_DIR / output_file
     output_path.parent.mkdir(parents=True, exist_ok=True)
     all_results.to_csv(output_path, index=False)
     logger.info(f"All results saved to {output_path}")

@@ -139,25 +139,35 @@ def main():
     print("Total rows scanned:", rows_scanned)
     print("Good rows saved:", len(rows))
 
+    # FOR DEBUG:
+    # Save also to excel with valid charachters
+    # news_df["text"] = news_df["text"].astype(str).apply(
+    #     lambda x: "".join(ch for ch in x if ord(ch) >= 32)
+    # )
+    # news_df.to_excel(OUTPUT_XLSX, index=False)
+
+    # Split each company to seperate file
+    # print(news_df["company"].value_counts())
+
+    # for company, group in news_df.groupby("company"):
+    #     filename = f"{FOLDER}news_{company.lower()}.parquet"
+    #     group.to_parquet(filename, index=False)
+    #     print(f"Saved {filename} with {len(group)} rows")
+
 if __name__ == "__main__":
     main()
 
 # Util
-def get_news_df_from_file(file_path):
-    if str(file_path).endswith(".csv"):
+def get_news_df_from_file(file_path: str) -> pd.DataFrame:
+    if file_path.endswith(".csv"):
         df = pd.read_csv(file_path, dtype=str)
     else:
         df = pd.read_parquet(file_path)
-        # Verify if 'date' is in columns, if not, check index
-        if "date" not in df.columns and isinstance(df.index, pd.DatetimeIndex):
-            df = df.reset_index()
-            
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors='coerce')
+    df["date"] = pd.to_datetime(df["date"])
     return df
 
 # From previous source Google News
-def get_google_news_titles(query, days):
+def get_google_news_titles(query: str, days: int) -> pd.DataFrame:
     # "when:Xd" limits to last X days
     q = query.replace(" ", "+") + f"+when:{days}d"
     url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
@@ -180,9 +190,3 @@ def get_google_news_titles(query, days):
         return df
 
     return pd.DataFrame(rows)
-
-def extract_title(text: str) -> str:
-    """Extract the first line (title) from a text blob."""
-    if not isinstance(text, str):
-        return ""
-    return text.strip().split("\n")[0]
