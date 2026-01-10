@@ -1,12 +1,12 @@
 from .sentiment_analysis import (
     display_demo_sentiment,
     generate_daily_sentiment_features,
+    get_sentiment_coverage_stats,
     get_demo_day_data,
     integrate_sentiment_data,
     run_sentiment_pipeline_for_report,
     verify_feature_integration,
     verify_unified_data,
-    get_config,
 )
 from .preprocessing import LogReturnTransformer, TimeSeriesScaler, MultiTickerScaler, create_sequences
 from .day_month import add_day_month_features, TIME_FEATURES
@@ -22,12 +22,12 @@ from . import targets
 __all__ = [
     "display_demo_sentiment",
     "generate_daily_sentiment_features",
+    "get_sentiment_coverage_stats",
     "get_demo_day_data",
     "integrate_sentiment_data",
     "run_sentiment_pipeline_for_report",
     "verify_feature_integration",
     "verify_unified_data",
-    "get_config",
     "LogReturnTransformer",
     "TimeSeriesScaler",
     "MultiTickerScaler",
