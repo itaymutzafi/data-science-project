@@ -69,46 +69,6 @@ def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: st
     plt.title(f"Correlation Between {ticker} and peer stock - {column}")
     plt.show()
 
-# def plot_corrletion_companies(df_s):
-#     """
-#     Correlation heatmap across companies' Close/Volume.
-#     Works directly on df_s (dict of dataframes) without assuming Apple-specific columns.
-#     """
-#     if not df_s:
-#         print("No data provided.")
-#         return
-
-#     # Build a combined dataframe with standardized column names per ticker
-#     combined = pd.DataFrame()
-#     for ticker, df in df_s.items():
-#         temp = df.copy()
-#         if not isinstance(temp.index, pd.DatetimeIndex):
-#             temp.index = pd.to_datetime(temp.index)
-#         if temp.index.tz is not None:
-#             temp.index = temp.index.tz_localize(None)
-
-#         cols = {}
-#         if "Close" in temp.columns:
-#             cols[f"{ticker} - Close"] = temp["Close"]
-#         if "Volume" in temp.columns:
-#             cols[f"{ticker} - Volume"] = temp["Volume"]
-#         if not cols:
-#             continue
-
-#         temp_df = pd.DataFrame(cols)
-#         combined = temp_df if combined.empty else combined.join(temp_df, how="outer")
-
-#     if combined.empty:
-#         print("No overlapping Close/Volume data to correlate.")
-#         return
-
-#     corr_df = combined.corr().round(2)
-#     plt.figure(figsize=(8, 6))
-#     sns.heatmap(corr_df, annot=True, cmap="coolwarm", fmt=".2f", vmin=-1, vmax=1)
-#     plt.title("Correlation Between Stocks (Close & Volume)")
-#     plt.tight_layout()
-#     plt.show()
-
 def add_auxiliary_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame) -> None:
     """
     Merges selected auxiliary features (e.g., Nasdaq, VIX) into each company's DataFrame 

@@ -53,7 +53,6 @@ __all__ = [
     "peer_stock_correlation",
     "add_auxiliary_features",
     "add_macro_features",
-    "PEER_FEATURES",
     "MACRO_FEATURES",
     "generate_diverse_combinations",
     "sets",
