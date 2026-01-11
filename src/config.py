@@ -41,6 +41,11 @@ AUX_TICKER_MAP = {
 }
 SAMPLES_PER_DAY = 1
 
+# Standard Rolling Windows (Unified across all features)
+FEATURE_WINDOWS = [20, 50, 200]  # Monthly, Quarterly, Yearly
+VOLATILITY_WINDOWS = [20]        # Standard Bollinger/Vol measure
+OUTLIER_THRESHOLD = 3.0          # Z-score threshold for outliers
+
 # Models
 SEED = 42
 

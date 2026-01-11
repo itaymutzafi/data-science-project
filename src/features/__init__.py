@@ -15,7 +15,7 @@ from .volatility import add_volatility_features, volatility_comparison_plot, VOL
 from .moving_average import add_ma_features, add_macd_feature, ma_plot, macd_plot, MA_FEATURES
 from .reports import reports, REPORT_FEATURE
 from .plots import avg_attr_by_time_plot
-from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, PEER_FEATURES, MACRO_FEATURES
+from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, add_macro_features, PEER_FEATURES, MACRO_FEATURES
 from .sets import generate_diverse_combinations
 from . import targets
 
@@ -52,6 +52,7 @@ __all__ = [
     "add_peer_stock_features",
     "peer_stock_correlation",
     "add_auxiliary_features",
+    "add_macro_features",
     "PEER_FEATURES",
     "MACRO_FEATURES",
     "generate_diverse_combinations",

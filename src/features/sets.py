@@ -1,10 +1,16 @@
 from typing import List, Dict, Optional
-from src.features import RETURN_FEATURES, MA_FEATURES, VOL_FEATURE, REPORT_FEATURE, PEER_FEATURES, MACRO_FEATURES, TIME_FEATURES
+from src.features import RETURN_FEATURES, REPORT_FEATURE, PEER_FEATURES, MACRO_FEATURES, TIME_FEATURES
+from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS
 
 BASIC_FEATURES = ["Open", "High", "Low", "Close"]
 VOLUME_FEATURE = ["Volume"]
 DIV_FEATURE = ["Dividends"]
 SPLIT_FEATURE = ["Stock Splits"]
+
+
+# Static Feature Definitions (Source of Truth)
+MA_FEATURES = [f"MA{w}" for w in FEATURE_WINDOWS] + ["MACD", "MACD_Signal", "MACD_Hist"]
+VOL_FEATURE = [f"Vol{w}" for w in VOLATILITY_WINDOWS]
 
 PRICE_FEATURES = BASIC_FEATURES + VOLUME_FEATURE + RETURN_FEATURES
 TECHNICAL_FEATURES = MA_FEATURES + VOL_FEATURE + REPORT_FEATURE
@@ -71,19 +77,19 @@ def get_feature_buckets() -> Dict[str, List[str]]:
     """Returns the raw buckets for sampling."""
     return {
         "PRICE": [f for f in PRICE_FEATURES if f != "Log_Return"], # log return is often target or strict feature
-        "TREND": ["MA20", "MA50"],
+        "TREND": [f"MA{w}" for w in FEATURE_WINDOWS], # Dynamic matching
         "MOMENTUM": ["MACD", "MACD_Signal", "MACD_Hist"],
-        "VOLATILITY": ["Vol20"],
+        "VOLATILITY": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
         "SENTIMENT": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,
-        "MACRO": MACRO_FEATURES,
+        "MACRO": MACRO_FEATURES, # Now includes VIX_Gap, etc.
     }
 
 
 # Logical Blocks for Coherent Feature Selection
 LOGICAL_BLOCKS = {
-    "Trend": ["MA20", "MA50"],  # Moving averages pair well
+    "Trend": [f"MA{w}" for w in FEATURE_WINDOWS],  # Moving averages pair well
     "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"],
-    "Volatility": ["Vol20"],
+    "Volatility": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
     "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
     "Events": ["Days To Nearest Report"],
     "Macro": MACRO_FEATURES,
