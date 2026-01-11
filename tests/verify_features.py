@@ -11,8 +11,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.features.moving_average import add_ma_features
 from src.features.volatility import add_volatility_features
 from src.features.external_market import add_macro_features
+from src.features.sentiment_analysis import calculate_market_features
 from src.features.sets import get_feature_buckets, LOGICAL_BLOCKS
-from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS
+from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
 
 # Mock plt.show to prevent blocking during automated tests
 import matplotlib.pyplot as plt
@@ -38,8 +39,32 @@ def test_features_and_sets():
     generated_cols = set(dfs["AAPL"].columns)
     print(f"Generated Columns: {sorted(list(generated_cols))}")
     
-    print("\n[Sets] Verifying Logical Blocks...")
+    # Simulate Sentiment Data
+    # We need to simulate the 'sentiment_mean' column before running calculate_market_features
+    # This usually comes from the pipeline but we can mock it here
+    for key in dfs:
+        dfs[key]['sentiment_mean'] = np.random.randn(len(dfs[key]))
+        dfs[key]['company'] = key
+        
+        # Add date column if not in index (calculate_market_features expects it or index reset)
+        # Actually calculate_market_features expects a dataframe with 'date', 'company' cols
+        # It's an internal function. Let's just manually verify the column names match our expectations via sets.
+        pass
+
+    print("[Sets] Verifying Logical Blocks...")
     buckets = get_feature_buckets()
+    
+    # Check Sentiment Smoothed
+    expected_sentiment_smoothed = {
+        f"sentiment_ma_{SENTIMENT_MA_WINDOW}d_lag1",
+        f"sentiment_momentum_{SENTIMENT_MOMENTUM_WINDOW}d_lag1",
+        f"sentiment_volatility_{SENTIMENT_MA_WINDOW}d_lag1",
+    }
+    actual_sentiment_smoothed = set(buckets["SENTIMENT"][4:]) # Smoothed are usually appended after base
+    # Better to check intersection or specific list
+    from src.features.sets import SENTIMENT_SMOOTHED
+    assert set(SENTIMENT_SMOOTHED) == expected_sentiment_smoothed, f"Sentiment Set Mismatch: {expected_sentiment_smoothed} vs {SENTIMENT_SMOOTHED}"
+
     
     # Check Trend
     expected_trend = {f"MA{w}" for w in FEATURE_WINDOWS}

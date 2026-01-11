@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional
 from src.features import RETURN_FEATURES, REPORT_FEATURE, PEER_FEATURES, MACRO_FEATURES, TIME_FEATURES
-from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS
+from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
 
 BASIC_FEATURES = ["Open", "High", "Low", "Close"]
 VOLUME_FEATURE = ["Volume"]
@@ -36,11 +36,11 @@ SENTIMENT_FEATURES = [
     "sentiment_trend_lag1",
 ]
 
-# 4. Advanced Sentiment (lagged) - optional extras
+# 4. Advanced Sentiment (lagged)
 SENTIMENT_SMOOTHED = [
-    "sentiment_ma_7d_lag1",
-    "sentiment_momentum_3d_lag1",
-    "sentiment_volatility_7d_lag1",
+    f"sentiment_ma_{SENTIMENT_MA_WINDOW}d_lag1",
+    f"sentiment_momentum_{SENTIMENT_MOMENTUM_WINDOW}d_lag1",
+    f"sentiment_volatility_{SENTIMENT_MA_WINDOW}d_lag1",
 ]
 
 
