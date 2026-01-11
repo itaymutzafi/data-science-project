@@ -26,6 +26,10 @@ CLASSIFICATION_MODELS = {
     "LogisticRegression",
     "RandomForestClassifier",
     "XGBClassifier",
+    "ClassificationBaselineRandom",
+    "ClassificationBaselineZero",
+    "ClassificationBaselineOne",
+    "ClassificationBaselineMajor"
 }
 
 REGRESSION_MODELS = {
