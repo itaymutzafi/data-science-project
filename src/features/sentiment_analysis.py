@@ -23,26 +23,9 @@ from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SA
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.evaluation import plots
 
-# SENTIMENT_LEVEL_OPTIONS = [
-#     "sentiment_mean_lag1",
-#     "sentiment_ma_7d_lag1",
-# ]
-# SENTIMENT_TREND_OPTIONS = [
-#     "sentiment_trend_lag1",
-#     "sentiment_momentum_3d_lag1",
-# ]
-# SENTIMENT_VARIABILITY_OPTIONS = [
-#     "sentiment_volatility_7d_lag1",
-# ]
-# SENTIMENT_ACTIVITY_OPTIONS = [
-#     "news_count_lag1",
-# ]
-# MARKET_SENTIMENT_OPTIONS = [
-#     "market_sentiment_lag1",
-# ]
-# SENTIMENT_FEATURES = SENTIMENT_LEVEL_OPTIONS + SENTIMENT_TREND_OPTIONS + SENTIMENT_VARIABILITY_OPTIONS + \
-#                      SENTIMENT_ACTIVITY_OPTIONS +  MARKET_SENTIMENT_OPTIONS      
-# TODO: add Sentiment_Score, sentiment_std_lag1?        
+# Sentiment Analysis Configuration
+# Note: Feature options are now handled in src.features.sets
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -303,6 +286,31 @@ def calculate_market_features(df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(features).reset_index(drop=True)
 
 
+def get_sentiment_coverage_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculates coverage statistics for sentiment data.
+    Returns a DataFrame with columns: [company, first_day, last_day, total_days, days_with_news, coverage_pct]
+    """
+    stats = []
+    if df.empty:
+        return pd.DataFrame()
+        
+    for company, group in df.groupby('company'):
+        total_days = len(group)
+        news_days = group[group['news_count'] > 0].shape[0]
+        
+        stats.append({
+            'company': company,
+            'first_day': group['date'].min(),
+            'last_day': group['date'].max(),
+            'total_days': total_days,
+            'days_with_news': news_days,
+            'coverage_pct': (news_days / total_days * 100) if total_days > 0 else 0
+        })
+    
+    return pd.DataFrame(stats).sort_values('company')
+
+
 def process_sentiment_timeseries(df: pd.DataFrame) -> pd.DataFrame:
     """Reindexes to continuous daily range and engineers features."""
     if df.empty: return df
@@ -356,7 +364,8 @@ def generate_daily_sentiment_features(
     if use_google_news:
         logger.info("Fetching recent Google News to fill gaps...")
         gn_frames = []
-        for company in ["Apple", "Microsoft", "Amazon", "Google"]:
+        # Use configuration map instead of hardcoded list
+        for company in TICKER_TO_COMPANY_MAP.values():
             try:
                 gn = get_google_news_titles(f"{company} stock", days=730)
                 if not gn.empty:
@@ -417,10 +426,7 @@ def get_demo_day_data(news_path: str, company: str, date: str, strict_match: boo
     # Apply strict matching (optional)
     if strict_match:
         # Simple heuristic: headline must contain company name
-        # Note: company_filter in load_and_preprocess_news filters by 'company' column, 
-        # this filters by text content if needed, or we can just ignore it if company_filter is robust enough.
-        # For now, we'll keep it as a placeholder or simple text check.
-        pass
+        df = df[df['final_text'].str.contains(company, case=False, na=False)]
 
     if df.empty:
         logger.warning(f"No valid news found for {company} on {date}")
@@ -558,6 +564,15 @@ def integrate_sentiment_data(
 
     # Time alignment and lag
     sent_df = sent_df.set_index('date').sort_index()
+
+    # Deduplicate sentiment data if needed
+    if sent_df.index.duplicated().any():
+        # logger might not be available in this scope if defined globally, assuming it is from line 32
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Found {sent_df.index.duplicated().sum()} duplicate timestamps in sentiment data for {target_company}. Aggregating by mean.")
+        # Group by date and take mean of numeric columns
+        sent_df = sent_df.groupby(level=0).mean(numeric_only=True)
     sent_df = sent_df[sentiment_columns]
     lagged = sent_df.shift(lag).add_suffix(f"_lag{lag}")
 
@@ -572,6 +587,12 @@ def integrate_sentiment_data(
 
     if not isinstance(merged.index, pd.DatetimeIndex):
         merged.index = pd.to_datetime(merged.index)
+    
+    # Handle duplicate indices in stock data if any
+    if merged.index.duplicated().any():
+        logger.warning(f"Found {merged.index.duplicated().sum()} duplicate timestamps in stock data for {company_name}. Keeping first occurrence.")
+        merged = merged[~merged.index.duplicated(keep='first')]
+
     lagged = lagged.reindex(merged.index)
     lagged = lagged.ffill()
     merged = merged.join(lagged)
@@ -585,10 +606,3 @@ def integrate_sentiment_data(
 
     return merged
 
-
-def get_config():
-    print(f""" Sentiment Analysis Configuration:
-    - Raw News Path: {RAW_NEWS_PATH}
-    - Output Cache: {SENTIMENT_CACHE}
-    - Samples Per Day: {SAMPLES_PER_DAY}
-    """)

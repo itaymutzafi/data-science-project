@@ -6,11 +6,11 @@ Exposes the main subpackages and configuration.
 import os
 
 from . import config
-from . import data
-from . import evaluation
-from . import features
-from . import models
-from . import utils
+from . import utils       # Utilities first (logging, stats, etc.)
+from . import evaluation  # Depends on utils
+from . import data        # Depends on evaluation (eda plots)
+from . import features    # Depends on data, evaluation
+from . import models      # Depends on all above
 
 # Pipelines are optional; import lazily to keep notebooks flexible.
 _pipelines_dir = os.path.join(os.path.dirname(__file__), "pipelines")

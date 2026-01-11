@@ -602,7 +602,146 @@ def plot_return_distributions(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> Non
     plt.show()
 
 
+
+def plot_sentiment_coverage_heatmap(daily_sentiment_df: pd.DataFrame) -> None:
+    """
+    Visualizes sentiment data availability (coverage) aggregated by month.
+    Darker cells indicate higher coverage (more days with news in that month).
+    """
+    set_style()
+    if daily_sentiment_df.empty:
+        print("No sentiment data to plot.")
+        return
+        
+    df = daily_sentiment_df.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # Create a monthly pivot table: % of days with news in that month
+    df['has_news'] = (df['news_count'] > 0).astype(int)
+    
+    # Group by Company and Month
+    pivot = df.set_index('date').groupby('company').resample('ME')['has_news'].mean().unstack(level=0)
+    
+    # Handle NaNs (months with no data context)
+    pivot = pivot.fillna(0)
+    
+    # Setup plot
+    plt.figure(figsize=(12, 5))
+    
+    # Create Heatmap
+    # cmap="Greens" gives a nice progression from white (0%) to dark green (100%)
+    ax = sns.heatmap(pivot.T, cmap="Greens", cbar_kws={'label': 'Coverage %'}, linewidths=0.5, linecolor='#eaeaea')
+    
+    # Format X-axis to show understandable dates (e.g., "Jan 2020")
+    # We define labels based on the columns (dates)
+    
+    # Get the timestamps from the columns
+    date_cols = pivot.index
+    
+    # Let seaborn/matplotlib handle the dates if possible, or force tick labels
+    # Since pivot.index is DatetimeIndex, we can format it.
+    
+    # Setting readable tick labels: Show every 6th month to avoid crowding
+    n_months = len(date_cols)
+    step = max(1, n_months // 10) # Aim for ~10 ticks max
+    
+    xticks = np.arange(0, n_months, step)
+    xlabels = [date_cols[i].strftime('%b %Y') for i in xticks]
+    
+    plt.xticks(xticks + 0.5, xlabels, rotation=0, ha='center', fontsize=10)
+    plt.yticks(rotation=0, fontsize=11, fontweight='bold')
+    
+    plt.title("Sentiment Data Coverage Intensity (Monthly)", fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel("") # Date is obvious
+    plt.ylabel("") 
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_rolling_sentiment_correlation(
+    merged_df: pd.DataFrame | dict, 
+    sentiment_col: str = 'sentiment_mean_lag1',
+    return_col: str = 'Log_Return',
+    window: int = 60
+) -> None:
+    """
+    Plots the rolling correlation between sentiment and returns.
+    Supports either a single DataFrame (with 'Ticker' col or single asset)
+    or a dictionary of DataFrames {ticker: df}.
+    """
+    set_style()
+    plt.figure(figsize=(12, 6))
+    
+    # Handle Dictionary Input
+    if isinstance(merged_df, dict):
+        datas = merged_df
+        for ticker, df in datas.items():
+            df = df.copy()
+            if not isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except Exception:
+                    continue
+            
+            if sentiment_col not in df.columns or return_col not in df.columns:
+                continue
+                
+            subset = df.sort_index()
+            if len(subset) < window: continue
+            
+            rolling_corr = subset[sentiment_col].rolling(window).corr(subset[return_col])
+            
+            # Map ticker to company name for label if possible
+            company = TICKER_TO_COMPANY_MAP.get(ticker, ticker)
+            color = COMPANY_COLORS.get(company, COMPANY_COLORS.get(ticker, None))
+            
+            plt.plot(rolling_corr.index, rolling_corr, label=f"{company}", color=color)
+            
+    # Handle Single DataFrame Input
+    else:
+        df = merged_df.copy()
+        if not isinstance(df.index, pd.DatetimeIndex):
+            try:
+                df.index = pd.to_datetime(df.index)
+            except Exception:
+                pass
+                
+        if sentiment_col not in df.columns or return_col not in df.columns:
+            print(f"Columns {sentiment_col} or {return_col} missing.")
+            return
+        
+        tickers = df['Ticker'].unique() if 'Ticker' in df.columns else ['Portfolio']
+        
+        for ticker in tickers:
+            if 'Ticker' in df.columns:
+                subset = df[df['Ticker'] == ticker].sort_index()
+                label = ticker
+            else:
+                subset = df.sort_index()
+                label = "Portfolio"
+                
+            if len(subset) < window:
+                continue
+                
+            rolling_corr = subset[sentiment_col].rolling(window).corr(subset[return_col])
+            
+            company = TICKER_TO_COMPANY_MAP.get(ticker, ticker)
+            color = COMPANY_COLORS.get(company, COMPANY_COLORS.get(ticker, None))
+            
+            plt.plot(rolling_corr.index, rolling_corr, label=f"{company} (Reg={window}d)", color=color)
+
+    plt.axhline(0, color='black', linestyle='--', alpha=0.5)
+    plt.title(f"Rolling {window}-Day Correlation: Sentiment vs. Log Returns", fontsize=14, fontweight='bold')
+    plt.ylabel("Correlation Coefficient")
+    plt.legend(loc='best')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
 def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame) -> None:
+
     """Plot raw and smoothed sentiment trends for the four companies."""
     set_style()
     if daily_sentiment_df.empty:
