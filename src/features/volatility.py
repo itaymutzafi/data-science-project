@@ -24,11 +24,7 @@ def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = V
                 # Calculate rolling std
                 vol_series = df['Return'].rolling(window=win).std()
                 
-                # Outlier Handling: Cap extreme volatilities
-                # We calculate the z-score of the VOLATILITY itself to find extreme anomalies
-                # relative to its own distribution, or just use raw threshold if domain knowledge suggests.
-                # Here, let's use a robust method: anything > threshold * mean_vol is capped.
-                # Actually, simple Z-score on the vol series:
+                # Applies outlier capping to volatility series to mitigate extreme values.
                 
                 mean_vol = vol_series.mean()
                 std_vol = vol_series.std()
