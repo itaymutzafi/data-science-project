@@ -30,18 +30,10 @@ SENTIMENT_FEATURES = [
     "sentiment_trend_lag1",
 ]
 
-# 4. Advanced Sentiment (lagged) - optional extras
-SENTIMENT_SMOOTHED = [
-    "sentiment_ma_7d_lag1",
-    "sentiment_momentum_3d_lag1",
-    "sentiment_volatility_7d_lag1",
-]
-
-
-ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES #+ TIME_FEATURES + PEER_FEATURES
+ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES +  MACRO_FEATURES #+ TIME_FEATURES + PEER_FEATURES
 
 # Grandmaster Set (The "Best" Combo)
-GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED))
+GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES))
 
 # Combined Sets
 def get_feature_set(name: str) -> List[str]:
@@ -56,8 +48,6 @@ def get_feature_set(name: str) -> List[str]:
         return list(set(PRICE_FEATURES + TECHNICAL_FEATURES))
     elif name == "PRICE_SENTIMENT":
         return list(set(PRICE_FEATURES + SENTIMENT_FEATURES))
-    elif name == "SENTIMENT_SMOOTHED":
-        return SENTIMENT_SMOOTHED
     elif name == "GRANDMASTER":
         return GRANDMASTER_FEATURES
     elif name == "ALL":
@@ -74,7 +64,7 @@ def get_feature_buckets() -> Dict[str, List[str]]:
         "TREND": ["MA20", "MA50"],
         "MOMENTUM": ["MACD", "MACD_Signal", "MACD_Hist"],
         "VOLATILITY": ["Vol20"],
-        "SENTIMENT": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,
+        "SENTIMENT": SENTIMENT_FEATURES,
         "MACRO": MACRO_FEATURES,
     }
 
@@ -84,9 +74,10 @@ LOGICAL_BLOCKS = {
     "Trend": ["MA20", "MA50"],  # Moving averages pair well
     "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"],
     "Volatility": ["Vol20"],
-    "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
+    "Sentiment": SENTIMENT_FEATURES,  # Slim core + advanced
     "Events": ["Days To Nearest Report"],
     "Macro": MACRO_FEATURES,
+    "Prophet": ["prophet_prediction"]
 }
 
 def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:

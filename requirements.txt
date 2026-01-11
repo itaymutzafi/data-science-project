@@ -9,6 +9,7 @@ statsmodels>=0.14.0
 feedparser
 datasets
 xgboost
+prophet
 
 # Financial data
 yfinance>=0.2.30
