@@ -4,10 +4,15 @@ from pathlib import Path
 from typing import List, Dict
 import seaborn as sns
 
-from src.config import *
+from src.config import TICKERS, TICKER_TO_COMPANY_MAP, COMPANY_COLORS, AUX_COLORS, FEATURE_WINDOWS
 
 PEER_FEATURES = {}
-MACRO_FEATURES = []# ["VIX_Index", "Treasury_10Y", "Nasdaq_100_Return"] append when adding to df not hard-coded
+MACRO_FEATURES = ["VIX_Index", "Treasury_10Y", "Nasdaq_100"] 
+
+def add_macro_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame) -> None:
+    # Wrapper for add_auxiliary_features that also adds derived features
+    add_auxiliary_features(dfs, aux_data)
+
 
 def add_peer_stock_features(dfs: Dict[str, pd.DataFrame], columns_to_merge: List[str]) -> None:
     added = []
@@ -64,46 +69,6 @@ def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: st
     plt.title(f"Correlation Between {ticker} and peer stock - {column}")
     plt.show()
 
-# def plot_corrletion_companies(df_s):
-#     """
-#     Correlation heatmap across companies' Close/Volume.
-#     Works directly on df_s (dict of dataframes) without assuming Apple-specific columns.
-#     """
-#     if not df_s:
-#         print("No data provided.")
-#         return
-
-#     # Build a combined dataframe with standardized column names per ticker
-#     combined = pd.DataFrame()
-#     for ticker, df in df_s.items():
-#         temp = df.copy()
-#         if not isinstance(temp.index, pd.DatetimeIndex):
-#             temp.index = pd.to_datetime(temp.index)
-#         if temp.index.tz is not None:
-#             temp.index = temp.index.tz_localize(None)
-
-#         cols = {}
-#         if "Close" in temp.columns:
-#             cols[f"{ticker} - Close"] = temp["Close"]
-#         if "Volume" in temp.columns:
-#             cols[f"{ticker} - Volume"] = temp["Volume"]
-#         if not cols:
-#             continue
-
-#         temp_df = pd.DataFrame(cols)
-#         combined = temp_df if combined.empty else combined.join(temp_df, how="outer")
-
-#     if combined.empty:
-#         print("No overlapping Close/Volume data to correlate.")
-#         return
-
-#     corr_df = combined.corr().round(2)
-#     plt.figure(figsize=(8, 6))
-#     sns.heatmap(corr_df, annot=True, cmap="coolwarm", fmt=".2f", vmin=-1, vmax=1)
-#     plt.title("Correlation Between Stocks (Close & Volume)")
-#     plt.tight_layout()
-#     plt.show()
-
 def add_auxiliary_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame) -> None:
     """
     Merges selected auxiliary features (e.g., Nasdaq, VIX) into each company's DataFrame 
@@ -135,8 +100,24 @@ def add_auxiliary_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame)
             # Forward fill to handle missing daily data if aux matches higher timeframe or gaps
             dfs[name][new_cols] = dfs[name][new_cols].ffill()
         
-            # Forward fill to handle missing daily data if aux matches higher timeframe or gaps
-            dfs[name][new_cols] = dfs[name][new_cols].ffill()
+        # --- Derived Macro Features (VIX Regimes) ---
+        df = dfs[name]
+        if 'VIX_Index' in df.columns:
+            # 1. VIX Trend (Moving Average)
+            # Use the shortest window (e.g., 20) for VIX trend
+            vix_win = FEATURE_WINDOWS[0] # 20
+            df[f'VIX_MA{vix_win}'] = df['VIX_Index'].rolling(window=vix_win).mean()
+            
+            # 2. VIX Gap / Regime (Current vs Trend)
+            # High Gap = Panic (Oversold market?)
+            # Low Gap = Complacency
+            df['VIX_Gap'] = df['VIX_Index'] - df[f'VIX_MA{vix_win}']
+            
+            # Track these new features
+            for f in [f'VIX_MA{vix_win}', 'VIX_Gap']:
+                if f not in MACRO_FEATURES:
+                    MACRO_FEATURES.append(f)
+
         
     # --- Visualization 1: Combined Trend Plot (All Stocks + Aux Features) ---
     print(f"\nVisualizing Combined Context for {len(dfs)} companies...")

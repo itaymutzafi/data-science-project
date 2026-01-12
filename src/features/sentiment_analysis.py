@@ -19,7 +19,7 @@ import torch
 from transformers import pipeline
 from tqdm import tqdm
 
-from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SAMPLES_PER_DAY
+from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SAMPLES_PER_DAY, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.evaluation import plots
 
@@ -277,10 +277,10 @@ def calculate_market_features(df: pd.DataFrame) -> pd.DataFrame:
     features = []
     for _, group in df.groupby('company'):
         group = group.sort_values('date')
-        group['sentiment_momentum_3d'] = group['sentiment_mean'].diff(3).fillna(0)
-        group['sentiment_ma_7d'] = group['sentiment_mean'].rolling(7, min_periods=1).mean()
-        group['sentiment_trend'] = group['sentiment_ma_7d'] # Alias
-        group['sentiment_volatility_7d'] = group['sentiment_mean'].rolling(7, min_periods=1).std().fillna(0)
+        group[f'sentiment_momentum_{SENTIMENT_MOMENTUM_WINDOW}d'] = group['sentiment_mean'].diff(SENTIMENT_MOMENTUM_WINDOW).fillna(0)
+        group[f'sentiment_ma_{SENTIMENT_MA_WINDOW}d'] = group['sentiment_mean'].rolling(SENTIMENT_MA_WINDOW, min_periods=1).mean()
+        group['sentiment_trend'] = group[f'sentiment_ma_{SENTIMENT_MA_WINDOW}d'] # Alias
+        group[f'sentiment_volatility_{SENTIMENT_MA_WINDOW}d'] = group['sentiment_mean'].rolling(SENTIMENT_MA_WINDOW, min_periods=1).std().fillna(0)
         features.append(group)
         
     return pd.concat(features).reset_index(drop=True)
