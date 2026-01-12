@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import math
 from typing import Dict, List
 
 from src.config import COMPANY_COLORS, FEATURE_WINDOWS
@@ -59,41 +60,55 @@ def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
 
 def ma_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = FEATURE_WINDOWS) -> None:
     """
-    Plots Close price against multiple Moving Averages with premium aesthetics.
-    """
-    for name, df in dfs.items():
-        plt.figure(figsize=(14, 7))
+    Plots Close price against multiple Moving Averages for all companies in a 2x2 grid.
+    Uses specific company colors for the Close price.
+    """    
+    num_plots = len(dfs)
+    if num_plots == 0:
+        return
+
+    cols = 2
+    rows = math.ceil(num_plots / cols)
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(14, 7 * rows))
+    axes = axes.flatten()  # Flatten to easy 1D indexing
+
+    for i, (name, df) in enumerate(dfs.items()):
+        ax = axes[i]
         
+        # Determine Color
+        color = COMPANY_COLORS.get(name) or COMPANY_COLORS.get(name.upper(), 'blue')
+
         # Plot Close Price
-        plt.plot(df.index, df['Close'], label=f"{name} Close", color='black', alpha=0.6, linewidth=1.5)
-        
+        ax.plot(df.index, df['Close'], label=f"{name} Close", color=color, alpha=0.9, linewidth=1.5)
+
         # Plot MAs
         for win in window_sizes:
             ma_col = f"MA{win}"
             if ma_col in df.columns:
-                # Use slightly different styles for different MAs
                 linestyle = '--' if win < 100 else '-'
-                width = 1.5 if win < 100 else 2.0
-                alpha = 0.9
+                width = 1.2 if win < 100 else 1.8
+                alpha = 0.7
                 
-                # Dynamic coloring or fallback
-                color = COMPANY_COLORS.get(name, 'blue') 
-                # Adjust shade based on window? For now, keep it simple but distinct
-                
-                plt.plot(df.index, df[ma_col], label=f"MA {win}", 
-                         linestyle=linestyle, linewidth=width, alpha=alpha)
+                ax.plot(df.index, df[ma_col], label=f"MA {win}", 
+                        linestyle=linestyle, linewidth=width, alpha=alpha)
 
-        plt.title(f"{name} - Price Trend Analysis (Moving Averages)", fontsize=14, fontweight='bold')
-        plt.ylabel("Price ($)", fontsize=12)
-        plt.xlabel("Date", fontsize=12)
-        plt.legend(loc='upper left', fontsize=10, frameon=True, shadow=True)
-        plt.grid(True, alpha=0.15, linestyle=':') # Subtle modern grid
+        ax.set_title(f"{name} - Price Trend", fontsize=12, fontweight='bold')
+        ax.set_xlabel("Date", fontsize=10)
+        ax.set_ylabel("Price ($)", fontsize=10)
+        ax.legend(loc='upper left', fontsize=8, frameon=True)
+        ax.grid(True, alpha=0.15, linestyle=':')
         
-        # Remove top and right spines for cleaner look
-        sns.despine() if 'sns' in globals() else None
-        
-        plt.tight_layout()
-        plt.show()
+        # Despine
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+    # Hide unused subplots
+    for j in range(i + 1, len(axes)):
+        fig.delaxes(axes[j])
+
+    plt.tight_layout()
+    plt.show()
 
 def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
     plt.figure(figsize=(13, 5))
