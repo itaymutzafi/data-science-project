@@ -25,12 +25,10 @@ TARGETS = {
 
 
 def check_targets(dfs: Dict[str, pd.DataFrame]):
-    # for model in models:
-        # targets_df = run_m/odel_for_target(dfs, )
-        # evaluation_metrics_target_plt(targets_df)
-    model = LogisticRegression()
-    targets_df = run_model_for_target(dfs, model)
-    evaluation_metrics_target_plt(targets_df)
+    for model in models:
+        targets_df = run_model_for_target(dfs, model)
+        evaluation_metrics_target_plt(targets_df)
+        print(avg_accuracy_per_target(targets_df))
 
 def run_model_for_target(dfs: Dict[str, pd.DataFrame], model) -> pd.DataFrame:
     all_summary_rows = []
@@ -62,30 +60,35 @@ def run_model_for_target(dfs: Dict[str, pd.DataFrame], model) -> pd.DataFrame:
     return pd.DataFrame(all_summary_rows)
 
 def evaluation_metrics_target_plt(df):
-    metrics = ["Accuracy", "MSE"]
+    metric = "Accuracy"
+    plt.figure(figsize=(9, 4))
 
-    _, axes = plt.subplots(
-        nrows=len(metrics),
-        figsize=(9, 4 * len(metrics))
-    )
+    for ticker in df["Ticker"].unique():
+        sub = df[df["Ticker"] == ticker]
 
-    for ax, metric in zip(axes, metrics):
-        for ticker in df["Ticker"].unique():
-            sub = df[df["Ticker"] == ticker]
+        plt.scatter(
+            sub["Target"],
+            sub[metric],
+            color=COMPANY_COLORS.get(ticker),
+            label=ticker,
+            s=60,
+            alpha=0.8
+        )
 
-            ax.plot(
-                sub["Target"],
-                sub[metric],
-                marker="o",
-                color=COMPANY_COLORS.get(ticker),
-                label=ticker
-            )
-
-        ax.set_title(f"{metric} by Target")
-        ax.set_ylabel(metric)
-        ax.grid(True, alpha=0.3)
-
-    axes[0].legend()
-    axes[-1].set_xlabel("Target Definition")
+    plt.axhline(0.5, color="black", linestyle="--", linewidth=1)
+    plt.xlabel("Target Definition")
+    plt.ylabel(metric)
+    plt.title(f"{metric} by Target")
+    plt.grid(True, alpha=0.3)
+    plt.legend()
     plt.tight_layout()
     plt.show()
+
+def avg_accuracy_per_target(df: pd.DataFrame) -> pd.DataFrame:
+    return (
+        df
+        .groupby("Target", as_index=False)["Accuracy"]
+        .mean()
+        .round(4)
+        .rename(columns={"Accuracy": "AvgAccuracy"})
+    )

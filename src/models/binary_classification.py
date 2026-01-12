@@ -1,6 +1,5 @@
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 import pandas as pd
 from src.evaluation.metrics import evaluate_classification
@@ -48,7 +47,6 @@ def run_binary_cls_with_feature_importance(
         preds_series = (preds_series > 0.5).astype(int)
 
         fold_metrics = evaluate_classification(y_val, preds_series)
-        fold_metrics["MSE"] = mean_squared_error(y_val, preds_series)
 
         all_results.append({
             "Ticker": ticker,
