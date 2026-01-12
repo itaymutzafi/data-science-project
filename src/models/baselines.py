@@ -146,3 +146,30 @@ class CAPMBaseline(BaseModel):
         
         prediction = self.risk_free_rate + self.beta * (self.market_return - self.risk_free_rate)
         return pd.Series(prediction, index=X.index)
+
+class ClassificationBaseline(BaseModel):
+    """Baseline for binary classification tasks."""
+    def __init__(self, strategy: str = "random"):
+        """
+        Args:
+            strategy: 'random' (coin flip), 'always_0', 'always_1', or 'majority'
+        """
+        self.strategy = strategy
+        self.majority_class = None
+        
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "ClassificationBaseline":
+        if self.strategy == "majority":
+            self.majority_class = int(y.mode().iloc[0]) if len(y.mode()) > 0 else 1
+        return self
+        
+    def predict(self, X: pd.DataFrame) -> pd.Series:
+        if self.strategy == "random":
+            return pd.Series(np.random.randint(0, 2, len(X)), index=X.index)
+        elif self.strategy == "always_0":
+            return pd.Series(0, index=X.index)
+        elif self.strategy == "always_1":
+            return pd.Series(1, index=X.index)
+        elif self.strategy == "majority":
+            return pd.Series(self.majority_class, index=X.index)
+        else:
+            raise ValueError(f"Unknown strategy: {self.strategy}")

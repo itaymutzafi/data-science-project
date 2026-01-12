@@ -16,7 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from src.evaluation import metrics
-from src.features import sets, targets
+from src.features import sets, experiment_create_target_variable
 from src.models import registry
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,10 @@ CLASSIFICATION_MODELS = {
     "LogisticRegression",
     "RandomForestClassifier",
     "XGBClassifier",
+    "ClassificationBaselineRandom",
+    "ClassificationBaselineZero",
+    "ClassificationBaselineOne",
+    "ClassificationBaselineMajor"
 }
 
 REGRESSION_MODELS = {
@@ -103,7 +107,7 @@ class ExperimentRunner:
         df = self.raw_dfs[ticker].copy()
 
         # 1. Generate Target
-        df, target_col = targets.create_target_variable(
+        df, target_col = experiment_create_target_variable(
             df,
             horizon=self.config.target_horizon,
             target_type=self.config.target_type

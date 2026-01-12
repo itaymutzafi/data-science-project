@@ -44,8 +44,14 @@ def get_model(name: str, input_size: Optional[int] = None, **kwargs) -> Any:
         return baselines.RandomBaseline(**kwargs)
     elif name == "MarketBenchmark":
         return baselines.MarketBenchmark(**kwargs)
-    elif name == "CAPMBaseline":
-        return baselines.CAPMBaseline(**kwargs)
+    elif name == "ClassificationBaselineRandom":
+        return baselines.ClassificationBaseline(**kwargs, strategy="random")
+    elif name == "ClassificationBaselineZero":
+        return baselines.ClassificationBaseline(**kwargs, strategy="always_0")
+    elif name == "ClassificationBaselineOne":
+        return baselines.ClassificationBaseline(**kwargs, strategy="always_1")
+    elif name == "ClassificationBaselineMajor":
+        return baselines.ClassificationBaseline(**kwargs, strategy="majority")
 
     # --- Standard ML Models (Scikit-Learn) ---
     elif name == "Ridge":
@@ -118,6 +124,10 @@ def list_available_models() -> List[str]:
         "RandomBaseline",
         "MarketBenchmark",
         "CAPMBaseline",
+        "ClassificationBaselineRandom",
+        "ClassificationBaselineZero",
+        "ClassificationBaselineOne",
+        "ClassificationBaselineMajor",
         "Ridge",
         "SVR",
         "RandomForest",

@@ -7,18 +7,9 @@ from price data.
 
 import pandas as pd
 import numpy as np
-from typing import Optional, List, Tuple
-from enum import Enum
+from typing import Tuple
 
-class TargetType(Enum):
-    REGRESSION = "regression"
-    CLASSIFICATION = "classification"
-
-def calculate_log_returns(series: pd.Series, period: int = 1) -> pd.Series:
-    """Calculates log returns: ln(Pt / Pt-k)."""
-    return np.log(series / series.shift(period))
-
-def create_target_variable(
+def experiment_create_target_variable(
     df: pd.DataFrame, 
     price_col: str = "Close", 
     horizon: int = 1, 

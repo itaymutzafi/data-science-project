@@ -44,10 +44,10 @@ SENTIMENT_SMOOTHED = [
 ]
 
 
-ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES
+ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES #+ TIME_FEATURES + PEER_FEATURES
 
 # Grandmaster Set (The "Best" Combo)
-GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED))
+GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES))
 
 # Combined Sets
 def get_feature_set(name: str) -> List[str]:
@@ -62,8 +62,6 @@ def get_feature_set(name: str) -> List[str]:
         return list(set(PRICE_FEATURES + TECHNICAL_FEATURES))
     elif name == "PRICE_SENTIMENT":
         return list(set(PRICE_FEATURES + SENTIMENT_FEATURES))
-    elif name == "SENTIMENT_SMOOTHED":
-        return SENTIMENT_SMOOTHED
     elif name == "GRANDMASTER":
         return GRANDMASTER_FEATURES
     elif name == "ALL":
@@ -93,6 +91,7 @@ LOGICAL_BLOCKS = {
     "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
     "Events": ["Days To Nearest Report"],
     "Macro": MACRO_FEATURES,
+    "Prophet": ["prophet_prediction"]
 }
 
 def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:
