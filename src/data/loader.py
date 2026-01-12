@@ -13,7 +13,7 @@ from yfinance import Ticker
 from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, TICKERS
 
 
-def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y") -> pd.DataFrame:
+def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
     """
     Fetches raw OHLCV data for initial research and stationarity tests.
     Implements local caching to avoid repeated API calls.
@@ -64,9 +64,10 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     df.index = df.index.tz_localize(None)
     
     # Save to cache
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(cache_path)
-    print(f"Saved {ticker_name} data to {cache_path}")
+    if save_file:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(cache_path)
+        print(f"Saved {ticker_name} data to {cache_path}")
     
     return df
 

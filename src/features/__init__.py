@@ -18,6 +18,7 @@ from .plots import avg_attr_by_time_plot
 from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, add_macro_features, PEER_FEATURES, MACRO_FEATURES
 from .sets import generate_diverse_combinations
 from .targets import experiment_create_target_variable
+from .prophet import prophet
 
 __all__ = [
     "display_demo_sentiment",
@@ -57,5 +58,6 @@ __all__ = [
     "MACRO_FEATURES",
     "generate_diverse_combinations",
     "sets",
-    "experiment_create_target_variable"
+    "experiment_create_target_variable",
+    "prophet"
 ]

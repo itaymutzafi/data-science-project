@@ -91,7 +91,7 @@ LOGICAL_BLOCKS = {
     "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
     "Events": ["Days To Nearest Report"],
     "Macro": MACRO_FEATURES,
-    "Prophet": ["prophet_prediction"]
+    "Prophet": ["prophet_prediction_binary", 'prophet_prediction_continuous']
 }
 
 def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:

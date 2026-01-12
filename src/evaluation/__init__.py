@@ -5,7 +5,7 @@ from . import comparisons
 from . import reporting
 from .analysis import check_stationarity, run_baseline_analysis, run_stationarity_analysis
 from .metrics import evaluate_regression, print_eval
-from .plots import set_style, plot_stationarity_check
+from .plots import set_style, plot_stationarity_check, plot_return_distributions
 
 __all__ = [
     "analysis",
@@ -20,4 +20,5 @@ __all__ = [
     "print_eval",
     "set_style",
     "plot_stationarity_check",
+    "plot_return_distributions"
 ]

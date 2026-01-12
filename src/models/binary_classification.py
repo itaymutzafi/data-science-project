@@ -4,6 +4,8 @@ from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 import pandas as pd
 from src.evaluation.metrics import evaluate_classification
+from sklearn.linear_model import LogisticRegression
+from xgboost.sklearn import XGBClassifier
 
 def run_binary_cls_with_feature_importance(
     data: pd.DataFrame,
@@ -55,3 +57,6 @@ def run_binary_cls_with_feature_importance(
         })
 
     return pd.DataFrame(all_results)
+
+
+models_for_target = [LogisticRegression()] #, XGBClassifier()]

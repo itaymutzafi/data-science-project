@@ -1,9 +1,11 @@
 import pandas as pd
-from typing import Dict
+from typing import Dict, List
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LogisticRegression
 from src.models import run_binary_cls_with_feature_importance
 from src.config import COMPANY_COLORS
+from src.models.binary_classification import models_for_target as models
+from sklearn.linear_model import LogisticRegression
+
 
 def target_daily(df):
     return (df["Log_Return"].shift(-1) > 0).astype(int)
@@ -21,16 +23,13 @@ TARGETS = {
     "multiday": lambda df: target_multiday(df, 3),
 }
 
+
 def check_targets(dfs: Dict[str, pd.DataFrame]):
-    checked_model = LogisticRegression(
-        solver="lbfgs",
-        l1_ratio=0.0,
-        C=1.0,
-        max_iter=1000
-    )
-
-    targets_df = run_model_for_target(dfs, checked_model)
-
+    # for model in models:
+        # targets_df = run_m/odel_for_target(dfs, )
+        # evaluation_metrics_target_plt(targets_df)
+    model = LogisticRegression()
+    targets_df = run_model_for_target(dfs, model)
     evaluation_metrics_target_plt(targets_df)
 
 def run_model_for_target(dfs: Dict[str, pd.DataFrame], model) -> pd.DataFrame:
