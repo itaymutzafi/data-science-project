@@ -20,6 +20,7 @@ from src.config import (
     MONTHNAMES,
     TICKERS,
     TICKER_TO_COMPANY_MAP,
+    DEF_SPLITS
 )
 from src.utils import statistic_tests as st
 
@@ -140,7 +141,7 @@ def table_visualize(df: pd.DataFrame, groupby) -> pd.DataFrame:
 
 
 # --- Validation / methodology plots ---
-def plot_walk_forward_validation(n_splits: int = 5, total_samples: int = 100) -> None:
+def plot_walk_forward_validation(n_splits: int = DEF_SPLITS, total_samples: int = 100) -> None:
     """Visualize strict walk-forward validation (expanding window)."""
     if n_splits < 1:
         raise ValueError("n_splits must be a positive integer.")

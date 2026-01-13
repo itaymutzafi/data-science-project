@@ -18,6 +18,7 @@ from tqdm import tqdm
 from src.evaluation import metrics
 from src.features import sets, experiment_create_target_variable
 from src.models import registry
+from src.config import DEF_SPLITS
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class ExperimentConfig:
     start_date: str
     end_date: str
     feature_set_params: Optional[Dict[str, List[str]]] = None
-    n_splits: int = 3
+    n_splits: int = DEF_SPLITS
 
 
 class ExperimentRunner:

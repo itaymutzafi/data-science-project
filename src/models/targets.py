@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Dict, List
 import matplotlib.pyplot as plt
 from src.models import run_binary_cls_with_feature_importance
-from src.config import COMPANY_COLORS
+from src.config import COMPANY_COLORS, DEF_SPLITS
 from src.models.binary_classification import models_for_target as models
 from sklearn.linear_model import LogisticRegression
 
@@ -24,13 +24,13 @@ TARGETS = {
 }
 
 
-def check_targets(dfs: Dict[str, pd.DataFrame]):
+def check_targets(dfs: Dict[str, pd.DataFrame], n_splits:int = DEF_SPLITS):
     for model in models:
-        targets_df = run_model_for_target(dfs, model)
+        targets_df = run_model_for_target(dfs, model, n_splits)
         evaluation_metrics_target_plt(targets_df)
         print(avg_accuracy_per_target(targets_df))
 
-def run_model_for_target(dfs: Dict[str, pd.DataFrame], model) -> pd.DataFrame:
+def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
     all_summary_rows = []
     
     for target_name, target_fn in TARGETS.items():
@@ -45,7 +45,8 @@ def run_model_for_target(dfs: Dict[str, pd.DataFrame], model) -> pd.DataFrame:
                 data=df,
                 target_col="TargetBinary",
                 model=model,
-                ticker=ticker
+                ticker=ticker,
+                n_splits=n_splits
             )
 
             mean_all = results_df.drop(columns=["Fold"]).mean(numeric_only=True)

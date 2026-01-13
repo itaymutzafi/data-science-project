@@ -6,10 +6,10 @@ from typing import Dict
 from yfinance import Ticker 
 from datetime import date
 from src import data, config, features
-from src.config import START_DATE
+from src.config import START_DATE, DEF_SPLITS
 
 
-def prophet(stocks_data: Dict[str, pd.DataFrame]):
+def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS):
     for stock_name, stock_df in stocks_data.items():
         ticker = Ticker(stock_name)
         proph_start_time = date(2015, 1, 1)
@@ -30,7 +30,6 @@ def prophet(stocks_data: Dict[str, pd.DataFrame]):
         prophet_data = df_prophet[["ds", "y"]].copy().reset_index(drop=True)
 
         # Walk-forward validation
-        n_splits = 5
         tscv = TimeSeriesSplit(n_splits=n_splits)
 
         all_predictions = []

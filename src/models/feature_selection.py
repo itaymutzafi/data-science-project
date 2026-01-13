@@ -4,6 +4,7 @@ from typing import Dict, List
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from src.models import run_binary_cls_with_feature_importance
+from src.config import DEF_SPLITS
 
 EXCLUDE_TARGET_COLS = ["TargetRegression", "TargetBinary"]
 
@@ -12,7 +13,8 @@ def forward_feature_selection(
     target_col: str,
     model,
     ticker: str,
-    max_features: int | None = None
+    max_features: int | None = None,
+    n_splits: int = DEF_SPLITS
 ):
     results = []
     selected_features = []
@@ -38,7 +40,8 @@ def forward_feature_selection(
                 data=df_sub,
                 target_col=target_col,
                 model=model,
-                ticker=ticker
+                ticker=ticker,
+                n_splits=n_splits
             )
 
             score = res["Accuracy"].mean()
@@ -63,7 +66,7 @@ def forward_feature_selection(
 
     return pd.DataFrame(results)
 
-def run_feature_selection(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+def run_feature_selection(dfs: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS) -> pd.DataFrame:
     all_forward_histories = []
 
     for ticker, df in dfs.items():
@@ -79,6 +82,7 @@ def run_feature_selection(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
             target_col="TargetBinary",
             model=LogisticRegression(),
             ticker=ticker,
+            n_splits=n_splits
             # max_features=25
         )
 

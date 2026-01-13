@@ -16,6 +16,7 @@ from sklearn.preprocessing import StandardScaler
 from src.evaluation.metrics import evaluate_regression
 from src.models import baselines
 from src.models.advanced import LSTMRegressor
+from src.config import DEF_SPLITS
 
 
 @dataclass
@@ -176,7 +177,7 @@ def run_screening(
     df: pd.DataFrame | Dict[str, pd.DataFrame],
     tickers: Iterable[str],
     target_col: str = "Target",
-    n_splits: int = 5,
+    n_splits: int = DEF_SPLITS,
     models: Optional[Dict[str, object]] = None,
     perform_scaling: bool = True,
 ) -> ScreeningArtifacts:
@@ -289,7 +290,7 @@ def run_walk_forward_screening(
     df: pd.DataFrame | Dict[str, pd.DataFrame],
     tickers: Iterable[str],
     target_col: str = "Target",
-    n_splits: int = 5,
+    n_splits: int = DEF_SPLITS,
     models: Optional[Dict[str, object]] = None,
     perform_scaling: bool = True,
 ) -> ScreeningArtifacts:

@@ -5,13 +5,14 @@ import pandas as pd
 from src.evaluation.metrics import evaluate_classification
 from sklearn.linear_model import LogisticRegression
 from xgboost.sklearn import XGBClassifier
+from src.config import DEF_SPLITS
 
 def run_binary_cls_with_feature_importance(
     data: pd.DataFrame,
     target_col: str,
     model,
     ticker: str,
-    n_splits: int = 5
+    n_splits: int = DEF_SPLITS
 ):
     """
     Walk-forward validation based on experiment _run_walk_forward_validation
