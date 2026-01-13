@@ -50,8 +50,8 @@ SENTIMENT_MOMENTUM_WINDOW = 3    # Short-term sentiment shift
 
 # Models
 SEED = 42
-SPLITS = 2
 DEF_SPLITS = 5
+SPLITS = 2
 
 # Visualization Colors
 COMPANY_COLORS = {
