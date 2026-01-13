@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional
+import pandas as pd
 from src.features import RETURN_FEATURES, REPORT_FEATURE, MACRO_FEATURES, TIME_FEATURES
 from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
 
@@ -107,6 +108,7 @@ def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42)
         random.seed(random_state)
 
     combinations = {}
+    metadata = {}
     block_names = list(LOGICAL_BLOCKS.keys())
     
     # Base features that should likely always be present for context
@@ -130,12 +132,18 @@ def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42)
         # Create descriptive name
         # e.g. "RND_Trend_Momentum"
         name_suffix = "_".join([name[:4] for name in selected_block_names])
-        combinations[f"BLOCKS_{i+1}_{name_suffix}"] = combo
+        subset_name = f"BLOCKS_{i+1}_{name_suffix}"
+
+        combinations[subset_name] = combo
+        metadata[subset_name] = {
+            "base_features": base_features,
+            "blocks": selected_block_names,
+        }
         
     if random_state is not None:
         print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}): {list(combinations.keys())[:3]}...")
 
-    return combinations
+    return combinations, metadata
 
 def generate_random_subspaces(
     n: int = 20,
@@ -171,3 +179,25 @@ def generate_random_subspaces(
         print(f"[sets] Generated {len(combinations)} random subspaces (seed={random_state}): {list(combinations.keys())[:3]}...")
 
     return combinations
+
+def print_feature_sets(results_df: pd.DataFrame, feature_metadata: dict):
+    """
+    Pretty-print FeatureSet -> features,
+    only for FeatureSets that appear in results_df.
+    """
+    feature_sets_in_results = results_df["FeatureSet"].unique()
+
+    for fs_name in feature_sets_in_results:
+        meta = feature_metadata.get(fs_name)
+        if meta is None:
+            continue
+
+        features = (
+            meta.get("base_features", []) +
+            sum((LOGICAL_BLOCKS[b] for b in meta.get("blocks", [])), [])
+        )
+        features = sorted(set(features))
+
+        print(f"\n=== {fs_name} ===")
+        for f in features:
+            print(f"  - {f}")
