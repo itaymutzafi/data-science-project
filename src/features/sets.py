@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional
 import pandas as pd
+import random
 from src.features import RETURN_FEATURES, REPORT_FEATURE, MACRO_FEATURES, TIME_FEATURES
 from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
 
@@ -8,69 +9,34 @@ VOLUME_FEATURE = ["Volume"]
 DIV_FEATURE = ["Dividends"]
 SPLIT_FEATURE = ["Stock Splits"]
 
-
-# Static Feature Definitions (Source of Truth)
 MA_FEATURES = [f"MA{w}" for w in FEATURE_WINDOWS] + ["MACD", "MACD_Signal", "MACD_Hist"]
 VOL_FEATURE = [f"Vol{w}" for w in VOLATILITY_WINDOWS]
 
 PRICE_FEATURES = BASIC_FEATURES + VOLUME_FEATURE + RETURN_FEATURES
 TECHNICAL_FEATURES = MA_FEATURES + VOL_FEATURE + REPORT_FEATURE
 
-# all columns in df:
-# ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits',
-#        'Day', 'Month', 'Return', 'Log_Return', 'Vol20', 'MA20', 'MA50', 'MACD',
-#        'MACD_Signal', 'MACD_Hist', 'MSFT - Close', 'MSFT - Volume',
-#        'MSFT - Log_Return', 'AMZN - Close', 'AMZN - Volume',
-#        'AMZN - Log_Return', 'GOOG - Close', 'GOOG - Volume',
-#        'GOOG - Log_Return', 'Days To Nearest Report', 'sentiment_mean_lag1',
-#        'news_count_lag1', 'market_sentiment_lag1', 'sentiment_trend_lag1',
-#        'Sentiment_Score']
-
-# TODO: according to ticker add PEER_FEATURES, sentiment
-
-# 3. Sentiment Features (lagged to avoid leakage)
-# Core set from the integrated sentiment pipeline
 SENTIMENT_FEATURES = [
     "sentiment_mean_lag1",
     "news_count_lag1",
     "market_sentiment_lag1",
     "sentiment_trend_lag1",
 ]
-
-# 4. Advanced Sentiment (lagged)
 SENTIMENT_SMOOTHED = [
     f"sentiment_ma_{SENTIMENT_MA_WINDOW}d_lag1",
     f"sentiment_momentum_{SENTIMENT_MOMENTUM_WINDOW}d_lag1",
     f"sentiment_volatility_{SENTIMENT_MA_WINDOW}d_lag1",
 ]
+# Logical Blocks for Coherent Feature Selection
+LOGICAL_BLOCKS = {
+    "Trend": [f"MA{w}" for w in FEATURE_WINDOWS],  # Moving averages pair well
+    "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"],
+    "Volatility": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
+    "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
+    "Events": ["Days To Nearest Report"],
+    "Macro": MACRO_FEATURES,
+    "Prophet": ["prophet_prediction_binary", 'prophet_prediction_continuous']
+}
 
-
-ALL_FEATURES = PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES + SENTIMENT_SMOOTHED + MACRO_FEATURES #+ TIME_FEATURES + PEER_FEATURES
-
-# Grandmaster Set (The "Best" Combo)
-GRANDMASTER_FEATURES = list(set(PRICE_FEATURES + TECHNICAL_FEATURES + SENTIMENT_FEATURES))
-
-# Combined Sets
-def get_feature_set(name: str) -> List[str]:
-    name = name.upper()
-    if name == "PRICE":
-        return PRICE_FEATURES
-    elif name == "TECH":
-        return TECHNICAL_FEATURES
-    elif name == "SENTIMENT":
-        return SENTIMENT_FEATURES
-    elif name == "PRICE_TECH":
-        return list(set(PRICE_FEATURES + TECHNICAL_FEATURES))
-    elif name == "PRICE_SENTIMENT":
-        return list(set(PRICE_FEATURES + SENTIMENT_FEATURES))
-    elif name == "GRANDMASTER":
-        return GRANDMASTER_FEATURES
-    elif name == "ALL":
-        all_feats = ALL_FEATURES
-        return list(set(all_feats))
-    else:
-        # Check if it's a generated random set (handled by caller, but if passed as list, we might need logic)
-        raise ValueError(f"Unknown feature set: {name}")
 
 def get_feature_buckets() -> Dict[str, List[str]]:
     """Returns the raw buckets for sampling."""
@@ -84,17 +50,6 @@ def get_feature_buckets() -> Dict[str, List[str]]:
     }
 
 
-# Logical Blocks for Coherent Feature Selection
-LOGICAL_BLOCKS = {
-    "Trend": [f"MA{w}" for w in FEATURE_WINDOWS],  # Moving averages pair well
-    "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"],
-    "Volatility": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
-    "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
-    "Events": ["Days To Nearest Report"],
-    "Macro": MACRO_FEATURES,
-    "Prophet": ["prophet_prediction_binary", 'prophet_prediction_continuous']
-}
-
 def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:
     """Generates N random combinations using Logical Blocks strategy.
 
@@ -102,13 +57,10 @@ def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42)
         n: Number of combinations.
         random_state: Seed for reproducibility. If None, no seeding is applied.
     """
-    import random
-    
     if random_state is not None:
         random.seed(random_state)
 
     combinations = {}
-    metadata = {}
     block_names = list(LOGICAL_BLOCKS.keys())
     
     # Base features that should likely always be present for context
@@ -135,69 +87,15 @@ def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42)
         subset_name = f"BLOCKS_{i+1}_{name_suffix}"
 
         combinations[subset_name] = combo
-        metadata[subset_name] = {
-            "base_features": base_features,
-            "blocks": selected_block_names,
-        }
         
     if random_state is not None:
         print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}): {list(combinations.keys())[:3]}...")
 
-    return combinations, metadata
-
-def generate_random_subspaces(
-    n: int = 20,
-    min_k: int = 3,
-    max_k: int = 8,
-    random_state: Optional[int] = 42
-) -> Dict[str, List[str]]:
-    """Generates N random feature subsets of varying size."""
-    import random
-    
-    if random_state is not None:
-        random.seed(random_state)
-
-    # Pool of all available features (excluding potential targets if known, but here we list inputs)
-    # We exclude 'Log_Return' from the pool if it's treated as target, but usually lag is fine.
-    # Let's ensure we have a broad pool.
-    pool = list(set(ALL_FEATURES))
-    
-    # Remove duplicates
-    pool = list(set(pool))
-    
-    combinations = {}
-    for i in range(n):
-        k = random.randint(min_k, min(max_k, len(pool)))
-        combo = random.sample(pool, k)
-        
-        # Randomize selection strictly from pool
-
-        
-        combinations[f"RANDOM_SUB_{i+1}"] = combo
-        
-    if random_state is not None:
-        print(f"[sets] Generated {len(combinations)} random subspaces (seed={random_state}): {list(combinations.keys())[:3]}...")
-
     return combinations
 
-def print_feature_sets(results_df: pd.DataFrame, feature_metadata: dict):
-    """
-    Pretty-print FeatureSet -> features,
-    only for FeatureSets that appear in results_df.
-    """
-    feature_sets_in_results = results_df["FeatureSet"].unique()
 
-    for fs_name in feature_sets_in_results:
-        meta = feature_metadata.get(fs_name)
-        if meta is None:
-            continue
-
-        features = (
-            meta.get("base_features", []) +
-            sum((LOGICAL_BLOCKS[b] for b in meta.get("blocks", [])), [])
-        )
-        features = sorted(set(features))
-
-        print(f"\n=== {fs_name} ===")
-        for f in features:
-            print(f"  - {f}")
+def print_feature_sets(diverse_sets: Dict[str, List[str]]):
+    for k, v, in diverse_sets.items():
+        print(k)
+        print (v)
+        print("-------------")

@@ -65,13 +65,14 @@ class ExperimentConfig:
         n_splits (int): Number of time-series cross-validation splits.
     """
     tickers: List[str]
-    feature_sets: List[str]
+    # feature_sets: List[str]
+    feature_sets: Dict[str, List[str]]
     models: List[str]
     target_type: str
     target_horizon: int
     start_date: str
     end_date: str
-    feature_set_params: Optional[Dict[str, List[str]]] = None
+    # feature_set_params: Optional[Dict[str, List[str]]] = None
     n_splits: int = DEF_SPLITS
 
 
@@ -89,12 +90,12 @@ class ExperimentRunner:
         self.config = config
         self.results: List[Dict[str, Any]] = []
 
-    def _prepare_data(self, ticker: str, feature_set: str) -> Tuple[pd.DataFrame, str, List[str]]:
+    def _prepare_data(self, ticker: str, feature_set: List[str]) -> Tuple[pd.DataFrame, str, List[str]]:
         """Prepares X and y for a specific ticker and feature set.
 
         Args:
             ticker (str): Ticker symbol.
-            feature_set (str): Name of the feature set.
+            feature_set 
 
         Returns:
             Tuple[pd.DataFrame, str, List[str]]:
@@ -114,19 +115,9 @@ class ExperimentRunner:
             target_type=self.config.target_type
         )
 
-        # 2. Select Features
-        if isinstance(feature_set, list):
-            feats = feature_set
-        else:
-            # Check config map first, then preset registry
-            if self.config.feature_set_params and feature_set in self.config.feature_set_params:
-                feats = self.config.feature_set_params[feature_set]
-            else:
-                feats = sets.get_feature_set(feature_set)
-
         # Verify features exist
-        available_feats = [f for f in feats if f in df.columns]
-        missing_feats = set(feats) - set(available_feats)
+        available_feats = [f for f in feature_set if f in df.columns]
+        missing_feats = set(feature_set) - set(available_feats)
         if missing_feats:
             logger.warning(f"Ticker {ticker}: Missing features {missing_feats}")
 
@@ -170,28 +161,29 @@ class ExperimentRunner:
 
         iterator = itertools.product(
             self.config.tickers,
-            self.config.feature_sets,
+            self.config.feature_sets.items(),
             self.config.models
         )
 
         # Estimate total work
-        total_steps = len(self.config.tickers) * len(self.config.feature_sets) * len(self.config.models)
+        total_steps = len(self.config.tickers) * len(self.config.feature_sets.keys()) * len(self.config.models)
 
         logger.info(f"Starting Experiment: {total_steps} combinations.")
         logger.info(f"Target: {self.config.target_type} ({self.config.target_horizon}D)")
 
-        for ticker, fset_name, model_name in tqdm(iterator, total=total_steps, desc="Running Grid"):
+        for ticker, (fset_name, fset_features), model_name in tqdm(iterator, total=total_steps, desc="Running Grid"):
             try:
-                self._run_single_experiment(ticker, fset_name, model_name)
+                self._run_single_experiment(ticker, fset_name, fset_features, model_name)
             except Exception as e:
                 logger.error(f"Failed {ticker}|{fset_name}|{model_name}: {e}")
 
-    def _run_single_experiment(self, ticker: str, fset_name: str, model_name: str) -> None:
+    def _run_single_experiment(self, ticker: str, fset_name: str, fset_features: List[str], model_name: str) -> None:
         """Runs a single combination of Ticker, FeatureSet, and Model.
 
         Args:
             ticker (str): Ticker symbol.
             fset_name (str): Feature set identifier.
+            fset_features
             model_name (str): Model identifier.
         """
         # 1. Compatibility Check
@@ -199,7 +191,7 @@ class ExperimentRunner:
             return
 
         # 2. Data Preparation
-        data, target_col, feature_cols = self._prepare_data(ticker, fset_name)
+        data, target_col, feature_cols = self._prepare_data(ticker, fset_features)
 
         # 3. Model Instantiation
         # Pass input_size to registry; it handles whether the model needs it (e.g., LSTM) or ignores it.
