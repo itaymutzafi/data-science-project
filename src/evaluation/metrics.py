@@ -86,12 +86,13 @@ def calculate_profit_factor(returns: pd.Series) -> float:
     return profits / losses
 
 
-def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
+def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=None) -> Dict[str, float]:
     """Compute regression & business metrics (MSE, R2, DA, Sharpe).
     
     Args:
         y_true: Actual log returns.
         y_pred: Predicted log returns.
+        model_name
         
     Returns:
         Dictionary of metrics.
@@ -108,22 +109,35 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
     correct_direction = np.sign(y_true) == np.sign(y_pred)
     da = np.mean(correct_direction)
 
-    # Binary labels for classification-style metrics (positive vs non-positive)
-    y_true_bin = (y_true > 0).astype(int)
-    y_pred_bin = (y_pred > 0).astype(int)
-    precision = precision_score(y_true_bin, y_pred_bin, zero_division=0)
-    recall = recall_score(y_true_bin, y_pred_bin, zero_division=0)
-    f1 = f1_score(y_true_bin, y_pred_bin, zero_division=0)
-    
-    # Sharpe Ratio of the STRATEGY
-    # Strategy: if pred > 0 buy, else sell/hold.
-    # We compute the Sharpe of a portfolio that follows the model's signals.
-    strategy_returns = np.sign(y_pred) * y_true
-    strategy_sharpe = calculate_sharpe_ratio(strategy_returns)
-    strategy_sortino = calculate_sortino_ratio(strategy_returns)
-    strategy_calmar = calculate_calmar_ratio(strategy_returns)
-    profit_factor = calculate_profit_factor(strategy_returns)
-    max_dd = calculate_max_drawdown(strategy_returns)
+    if model_name is not None and model_name in {"NaiveBaseline", "MarketBenchmark"}:
+        precision = 0.0
+        recall = 0.0
+        f1 = 0.0
+        strategy_sharpe = 0.0
+        strategy_sortino = 0.0
+        strategy_calmar = 0.0
+        profit_factor = 0.0
+        max_dd = 0.0
+        ic = 0.0
+    else:
+        # Binary labels for classification-style metrics (positive vs non-positive)
+        y_true_bin = (y_true > 0).astype(int)
+        y_pred_bin = (y_pred > 0).astype(int)
+        precision = precision_score(y_true_bin, y_pred_bin, zero_division=0)
+        recall = recall_score(y_true_bin, y_pred_bin, zero_division=0)
+        f1 = f1_score(y_true_bin, y_pred_bin, zero_division=0)
+        
+        # Sharpe Ratio of the STRATEGY
+        # Strategy: if pred > 0 buy, else sell/hold.
+        # We compute the Sharpe of a portfolio that follows the model's signals.
+        strategy_returns = np.sign(y_pred) * y_true
+        strategy_sharpe = calculate_sharpe_ratio(strategy_returns)
+        strategy_sortino = calculate_sortino_ratio(strategy_returns)
+        strategy_calmar = calculate_calmar_ratio(strategy_returns)
+        profit_factor = calculate_profit_factor(strategy_returns)
+        max_dd = calculate_max_drawdown(strategy_returns)
+
+        ic = y_true.corr(y_pred) # Information Coefficient (Pearson)
 
     return {
         "MSE": mse,
@@ -139,7 +153,7 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float
         "Strategy Calmar": strategy_calmar,
         "Profit Factor": profit_factor,
         "Max Drawdown": max_dd,
-        "IC": y_true.corr(y_pred) # Information Coefficient (Pearson)
+        "IC": ic
     }
 
 

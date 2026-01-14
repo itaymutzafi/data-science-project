@@ -264,7 +264,7 @@ class ExperimentRunner:
                     preds_series = (preds_series > 0.5).astype(int)
                 fold_metrics = metrics.evaluate_classification(y_val, preds_series)
             else:
-                fold_metrics = metrics.evaluate_regression(y_val, preds_series)
+                fold_metrics = metrics.evaluate_regression(y_val, preds_series, model_name)
 
             # Store result
             result_row = {
