@@ -6,8 +6,6 @@ import seaborn as sns
 
 from src.config import TICKERS, TICKER_TO_COMPANY_MAP, COMPANY_COLORS, AUX_COLORS, FEATURE_WINDOWS
 
-PEER_FEATURES = {}
-MACRO_FEATURES = ["VIX_Index", "Treasury_10Y", "Nasdaq_100"] 
 
 def add_macro_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame) -> None:
     # Wrapper for add_auxiliary_features that also adds derived features
@@ -55,7 +53,6 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
 
         res_df = res_df.join(feature_df_selected, how="left")
         print(f"Merged {feature_name} - Added {len(feature_df_selected.columns)} columns: {list(feature_df_selected.columns)}")
-        PEER_FEATURES[ticker_name] = feature_df_selected
        
     return res_df
 
@@ -112,12 +109,6 @@ def add_auxiliary_features(dfs: Dict[str, pd.DataFrame], aux_data: pd.DataFrame)
             # High Gap = Panic (Oversold market?)
             # Low Gap = Complacency
             df['VIX_Gap'] = df['VIX_Index'] - df[f'VIX_MA{vix_win}']
-            
-            # Track these new features
-            for f in [f'VIX_MA{vix_win}', 'VIX_Gap']:
-                if f not in MACRO_FEATURES:
-                    MACRO_FEATURES.append(f)
-
         
     # --- Visualization 1: Combined Trend Plot (All Stocks + Aux Features) ---
     print(f"\nVisualizing Combined Context for {len(dfs)} companies...")

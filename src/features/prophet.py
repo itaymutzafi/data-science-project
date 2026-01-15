@@ -5,8 +5,10 @@ import pandas as pd
 from typing import Dict
 from yfinance import Ticker 
 from datetime import date
-from src import data, config, features
-from src.config import START_DATE, DEF_SPLITS
+
+from src.config import START_DATE, END_DATE, DEF_SPLITS
+from src.data import fetch_sample_data
+from src.features import add_return_features
 
 
 def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS):
@@ -14,8 +16,8 @@ def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS):
         ticker = Ticker(stock_name)
         proph_start_time = date(2015, 1, 1)
 
-        work_df = data.fetch_sample_data(ticker, proph_start_time, config.END_DATE, save_file = False)
-        features.add_return_features({ticker: work_df})
+        work_df = fetch_sample_data(ticker, proph_start_time, END_DATE, save_file = False)
+        add_return_features({ticker: work_df})
         work_df.index = work_df.index.tz_localize(None)
         work_df = work_df.reset_index()
 

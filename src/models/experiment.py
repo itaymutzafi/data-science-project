@@ -55,24 +55,21 @@ class ExperimentConfig:
     
     Attributes:
         tickers (List[str]): List of stock tickers to process.
-        feature_sets (List[str]): Names of feature sets to test.
+        feature_sets 
         models (List[str]): Names of models to evaluate (must match registry).
         target_type (str): 'continuous' (regression) or 'binary' (classification).
         target_horizon (int): Prediction horizon in days.
         start_date (str): Start date string (YYYY-MM-DD).
         end_date (str): End date string (YYYY-MM-DD).
-        feature_set_params (Optional[Dict[str, List[str]]]): Custom feature set definitions.
         n_splits (int): Number of time-series cross-validation splits.
     """
     tickers: List[str]
-    # feature_sets: List[str]
-    feature_sets: Dict[str, List[str]]
+    feature_sets: Dict[str, Dict[str, List[str]]]
     models: List[str]
     target_type: str
     target_horizon: int
     start_date: str
     end_date: str
-    # feature_set_params: Optional[Dict[str, List[str]]] = None
     n_splits: int = DEF_SPLITS
 
 
@@ -159,23 +156,32 @@ class ExperimentRunner:
                 f"Incompatible models for target_type '{self.config.target_type}': {incompatible}"
             )
 
-        iterator = itertools.product(
-            self.config.tickers,
-            self.config.feature_sets.items(),
-            self.config.models
+        total_steps = sum(
+            len(self.config.feature_sets[ticker]) * len(self.config.models)
+            for ticker in self.config.tickers
         )
-
-        # Estimate total work
-        total_steps = len(self.config.tickers) * len(self.config.feature_sets.keys()) * len(self.config.models)
 
         logger.info(f"Starting Experiment: {total_steps} combinations.")
         logger.info(f"Target: {self.config.target_type} ({self.config.target_horizon}D)")
 
-        for ticker, (fset_name, fset_features), model_name in tqdm(iterator, total=total_steps, desc="Running Grid"):
-            try:
-                self._run_single_experiment(ticker, fset_name, fset_features, model_name)
-            except Exception as e:
-                logger.error(f"Failed {ticker}|{fset_name}|{model_name}: {e}")
+        with tqdm(total=total_steps, desc="Running Grid") as pbar:
+            for ticker in self.config.tickers:
+                ticker_feature_sets = self.config.feature_sets[ticker]  # Dict[str, List[str]]
+
+                for fset_name, fset_features in ticker_feature_sets.items():
+                    for model_name in self.config.models:
+                        try:
+                            self._run_single_experiment(
+                                ticker=ticker,
+                                fset_name=fset_name,
+                                fset_features=fset_features,
+                                model_name=model_name,
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed {ticker}|{fset_name}|{model_name}: {e}")
+                        finally:
+                            pbar.update(1)
+
 
     def _run_single_experiment(self, ticker: str, fset_name: str, fset_features: List[str], model_name: str) -> None:
         """Runs a single combination of Ticker, FeatureSet, and Model.

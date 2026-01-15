@@ -1,59 +1,51 @@
 from typing import List, Dict, Optional
-import pandas as pd
 import random
-from src.features import RETURN_FEATURES, REPORT_FEATURE, MACRO_FEATURES, TIME_FEATURES
-from src.config import FEATURE_WINDOWS, VOLATILITY_WINDOWS, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
+from src.config import SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, VOLATILITY_WINDOWS, FEATURE_WINDOWS
 
-BASIC_FEATURES = ["Open", "High", "Low", "Close"]
+BASIC_FEATURES = ["Close"] # chose only one and not ["Open", "High", "Low", "Close"]
 VOLUME_FEATURE = ["Volume"]
 DIV_FEATURE = ["Dividends"]
 SPLIT_FEATURE = ["Stock Splits"]
-
-MA_FEATURES = [f"MA{w}" for w in FEATURE_WINDOWS] + ["MACD", "MACD_Signal", "MACD_Hist"]
-VOL_FEATURE = [f"Vol{w}" for w in VOLATILITY_WINDOWS]
-
-PRICE_FEATURES = BASIC_FEATURES + VOLUME_FEATURE + RETURN_FEATURES
-TECHNICAL_FEATURES = MA_FEATURES + VOL_FEATURE + REPORT_FEATURE
-
+TIME_FEATURES = ['Month', 'Day_sin', 'Day_cos']
+RETURN_FEATURES = ['Return', 'Log_Return']
+VOL_FEATURE = [f"Vol{win}" for win in VOLATILITY_WINDOWS]
+MA_FEATURES = [f"MA{win}" for win in FEATURE_WINDOWS]
+MOMENTUM_FEATURES = ['MACD', 'MACD_Signal', 'MACD_Hist']
+PEER_FEATURES = {
+    "AAPL" : ['MSFT - Close', 'MSFT - Volume', 'MSFT - Log_Return', 
+              'AMZN - Close', 'AMZN - Volume', 'AMZN - Log_Return', 
+              'GOOG - Close', 'GOOG - Volume', 'GOOG - Log_Return'],
+    "MSFT" : ['AAPL - Close', 'AAPL - Volume', 'AAPL - Log_Return', 
+              'AMZN - Close', 'AMZN - Volume', 'AMZN - Log_Return', 
+              'GOOG - Close', 'GOOG - Volume', 'GOOG - Log_Return'],
+    "AMZN" : ['MSFT - Close', 'MSFT - Volume', 'MSFT - Log_Return', 
+              'AAPL - Close', 'AAPL - Volume', 'AAPL - Log_Return', 
+              'GOOG - Close', 'GOOG - Volume', 'GOOG - Log_Return'],
+    "GOOG" : ['MSFT - Close', 'MSFT - Volume', 'MSFT - Log_Return', 
+              'AMZN - Close', 'AMZN - Volume', 'AMZN - Log_Return', 
+              'AAPL - Close', 'AAPL - Volume', 'AAPL - Log_Return']
+}
+MACRO_FEATURES = ['NVIDIA_Segment_Leader', 'Nasdaq_100', 'Treasury_10Y', 'VIX_Index', 'VIX_MA20', 'VIX_Gap']
+REPORT_FEATURE = ["Days To Nearest Report"]
 SENTIMENT_FEATURES = [
     "sentiment_mean_lag1",
     "news_count_lag1",
     "market_sentiment_lag1",
     "sentiment_trend_lag1",
-]
-SENTIMENT_SMOOTHED = [
+    "sentiment_std_lag1",
+    "Sentiment_Score",
     f"sentiment_ma_{SENTIMENT_MA_WINDOW}d_lag1",
     f"sentiment_momentum_{SENTIMENT_MOMENTUM_WINDOW}d_lag1",
     f"sentiment_volatility_{SENTIMENT_MA_WINDOW}d_lag1",
 ]
-# Logical Blocks for Coherent Feature Selection
-LOGICAL_BLOCKS = {
-    "Trend": [f"MA{w}" for w in FEATURE_WINDOWS],  # Moving averages pair well
-    "Momentum": ["MACD", "MACD_Signal", "MACD_Hist"],
-    "Volatility": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
-    "Sentiment": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,  # Slim core + advanced
-    "Events": ["Days To Nearest Report"],
-    "Macro": MACRO_FEATURES,
-    "Prophet": ["prophet_prediction_binary", 'prophet_prediction_continuous']
-}
+PROPHET_FEATURES = ['prophet_prediction_binary', 'prophet_prediction_continuous']
 
 
-def get_feature_buckets() -> Dict[str, List[str]]:
-    """Returns the raw buckets for sampling."""
-    return {
-        "PRICE": [f for f in PRICE_FEATURES if f != "Log_Return"], # log return is often target or strict feature
-        "TREND": [f"MA{w}" for w in FEATURE_WINDOWS], # Dynamic matching
-        "MOMENTUM": ["MACD", "MACD_Signal", "MACD_Hist"],
-        "VOLATILITY": [f"Vol{w}" for w in VOLATILITY_WINDOWS],
-        "SENTIMENT": SENTIMENT_FEATURES + SENTIMENT_SMOOTHED,
-        "MACRO": MACRO_FEATURES, # Now includes VIX_Gap, etc.
-    }
-
-
-def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:
+def generate_diverse_combinations(ticker: str, n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:
     """Generates N random combinations using Logical Blocks strategy.
 
     Args:
+        ticker
         n: Number of combinations.
         random_state: Seed for reproducibility. If None, no seeding is applied.
     """
@@ -61,35 +53,45 @@ def generate_diverse_combinations(n: int = 20, random_state: Optional[int] = 42)
         random.seed(random_state)
 
     combinations = {}
-    block_names = list(LOGICAL_BLOCKS.keys())
-    
-    # Base features that should likely always be present for context
-    base_features = ["Open", "Close", "Volume", "Return", "Log_Return", "Vol20"]
+
+    blocks = {
+        "Basic": BASIC_FEATURES,
+        "Volume": VOLUME_FEATURE,
+        "Dividends": DIV_FEATURE,
+        "Splits": SPLIT_FEATURE,
+        "Time": TIME_FEATURES,
+        "Return": RETURN_FEATURES,
+        "Volatility": VOL_FEATURE,
+        "MovingAverage": MA_FEATURES,
+        "Momentum": MOMENTUM_FEATURES,
+        "Macro": MACRO_FEATURES,
+        "Report": REPORT_FEATURE,
+        "Sentiment": SENTIMENT_FEATURES,
+        "Prophet": PROPHET_FEATURES,
+        "Peer": PEER_FEATURES[ticker]
+    }
+    block_names = list(blocks.keys())
     
     for i in range(n):
-        # 1. Select random number of blocks (e.g., 2 to 4 blocks)
         num_blocks = random.randint(2, 4)
-        
-        # 2. Sample blocks without replacement
-        selected_block_names = random.sample(block_names, num_blocks)
-        
-        # 3. Flatten features
-        combo = list(base_features) # Start with base
+
+        # Always have basic feature
+        other_blocks = [b for b in block_names if b != "Basic"]
+        selected_block_names = ["Basic"] + random.sample(other_blocks, num_blocks)
+
+        combo = []
         for name in selected_block_names:
-            combo.extend(LOGICAL_BLOCKS[name])
-            
-        # 4. Remove potential duplicates and ensure valid list
+            combo.append(random.choice(blocks[name]))
+
+        # Remove potential duplicates and ensure valid list
         combo = list(set(combo))
         
-        # Create descriptive name
-        # e.g. "RND_Trend_Momentum"
         name_suffix = "_".join([name[:4] for name in selected_block_names])
         subset_name = f"BLOCKS_{i+1}_{name_suffix}"
 
         combinations[subset_name] = combo
         
-    if random_state is not None:
-        print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}): {list(combinations.keys())[:3]}...")
+    print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}): {list(combinations.keys())[:3]}...")
 
     return combinations
 

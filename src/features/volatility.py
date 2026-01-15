@@ -5,7 +5,6 @@ from typing import Dict, List
 from src.config import COMPANY_COLORS, VOLATILITY_WINDOWS, OUTLIER_THRESHOLD
 import seaborn as sns
 
-VOL_FEATURE = []
 
 def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = VOLATILITY_WINDOWS) -> None:
     """
@@ -13,8 +12,6 @@ def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = V
     Handles outliers by capping at OUTLIER_THRESHOLD * STD.
     """
     added = []
-    
-    global VOL_FEATURE
     
     for name, df in dfs.items():
         if "Return" in df.columns:
@@ -35,9 +32,6 @@ def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = V
                     vol_series = vol_series.clip(upper=upper_limit)
                 
                 df[col_name] = vol_series
-                
-                if col_name not in VOL_FEATURE:
-                    VOL_FEATURE.append(col_name)
                     
             added.append(name)
 
