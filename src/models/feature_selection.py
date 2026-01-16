@@ -4,7 +4,7 @@ from typing import Dict, List
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from src.models import run_binary_cls_with_feature_importance
-from src.config import DEF_SPLITS
+from src.config import DEF_SPLITS, COMPANY_COLORS
 
 EXCLUDE_TARGET_COLS = ["TargetRegression", "TargetBinary"]
 
@@ -96,12 +96,14 @@ def feature_selection_plot(df: pd.DataFrame):
 
     for ticker in df["Ticker"].unique():
         sub = df[df["Ticker"] == ticker]
+        color = COMPANY_COLORS.get(ticker)
 
         plt.plot(
             sub["NumFeatures"],
             sub["Accuracy"],
             marker="o",
-            label=ticker
+            label=ticker,
+            color=color
         )
 
         # mark max
@@ -111,7 +113,8 @@ def feature_selection_plot(df: pd.DataFrame):
         plt.scatter(
             best_row["NumFeatures"],
             best_row["Accuracy"],
-            s=100
+            s=100,
+            color=color
         )
 
         plt.text(

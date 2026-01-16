@@ -4,10 +4,9 @@ This module manages the execution of the experimental grid, iterating over
 combinations of time-series data (tickers), feature sets, and machine learning models.
 """
 
-import itertools
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from src.evaluation import metrics
-from src.features import sets, experiment_create_target_variable
+from src.features import experiment_create_target_variable
 from src.models import registry
 from src.config import DEF_SPLITS
 
@@ -64,7 +63,7 @@ class ExperimentConfig:
         n_splits (int): Number of time-series cross-validation splits.
     """
     tickers: List[str]
-    feature_sets: Dict[str, Dict[str, List[str]]]
+    feature_sets: Dict[str, Dict[int, List[str]]]
     models: List[str]
     target_type: str
     target_horizon: int
@@ -168,27 +167,27 @@ class ExperimentRunner:
             for ticker in self.config.tickers:
                 ticker_feature_sets = self.config.feature_sets[ticker]  # Dict[str, List[str]]
 
-                for fset_name, fset_features in ticker_feature_sets.items():
+                for fset_id, fset_features in ticker_feature_sets.items():
                     for model_name in self.config.models:
                         try:
                             self._run_single_experiment(
                                 ticker=ticker,
-                                fset_name=fset_name,
+                                fset_id=fset_id,
                                 fset_features=fset_features,
                                 model_name=model_name,
                             )
                         except Exception as e:
-                            logger.error(f"Failed {ticker}|{fset_name}|{model_name}: {e}")
+                            logger.error(f"Failed {ticker}|{fset_id}|{model_name}: {e}")
                         finally:
                             pbar.update(1)
 
 
-    def _run_single_experiment(self, ticker: str, fset_name: str, fset_features: List[str], model_name: str) -> None:
+    def _run_single_experiment(self, ticker: str, fset_id: int, fset_features: List[str], model_name: str) -> None:
         """Runs a single combination of Ticker, FeatureSet, and Model.
 
         Args:
             ticker (str): Ticker symbol.
-            fset_name (str): Feature set identifier.
+            fset_id (int): Feature set identifier.
             fset_features
             model_name (str): Model identifier.
         """
@@ -205,7 +204,7 @@ class ExperimentRunner:
         model = registry.get_model(model_name, input_size=input_size)
 
         # 4. Execution (Walk-Forward Validation)
-        self._run_walk_forward_validation(data, target_col, model, model_name, ticker, fset_name)
+        self._run_walk_forward_validation(data, target_col, model, model_name, ticker, fset_id)
 
     def _run_walk_forward_validation(
         self,
@@ -214,7 +213,7 @@ class ExperimentRunner:
         model: Any,
         model_name: str,
         ticker: str,
-        fset_name: str
+        fset_id: int
     ) -> None:
         """Performs Time-Series Walk-Forward validation.
 
@@ -267,7 +266,7 @@ class ExperimentRunner:
             # Store result
             result_row = {
                 "Ticker": ticker,
-                "FeatureSet": fset_name,
+                "FeatureSet": fset_id,
                 "Model": model_name,
                 "TargetType": self.config.target_type,
                 "Diff": self.config.target_horizon,

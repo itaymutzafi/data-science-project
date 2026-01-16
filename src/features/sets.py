@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional
+import pandas as pd
 import random
 from src.config import SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, VOLATILITY_WINDOWS, FEATURE_WINDOWS
 
@@ -41,7 +42,16 @@ SENTIMENT_FEATURES = [
 PROPHET_FEATURES = ['prophet_prediction_binary', 'prophet_prediction_continuous']
 
 
-def generate_diverse_combinations(ticker: str, n: int = 20, random_state: Optional[int] = 42) -> Dict[str, List[str]]:
+def generate_diverse_combinations(dfs: Dict[str, pd.DataFrame], n: int, random_state) -> Dict[str, Dict[int, List[str]]]:
+    ticker_diverse_sets = {}
+
+    for ticker, _ in dfs.items():
+        ticker_diverse_sets[ticker] = generate_diverse_combination_per_ticker(ticker, n, random_state)
+    
+    return ticker_diverse_sets
+
+
+def generate_diverse_combination_per_ticker(ticker: str, n: int = 20, random_state: Optional[int] = 42) -> Dict[int, List[str]]:
     """Generates N random combinations using Logical Blocks strategy.
 
     Args:
@@ -65,9 +75,9 @@ def generate_diverse_combinations(ticker: str, n: int = 20, random_state: Option
         "MovingAverage": MA_FEATURES,
         "Momentum": MOMENTUM_FEATURES,
         "Macro": MACRO_FEATURES,
-        "Report": REPORT_FEATURE,
+        # "Report": REPORT_FEATURE,
         "Sentiment": SENTIMENT_FEATURES,
-        "Prophet": PROPHET_FEATURES,
+        # "Prophet": PROPHET_FEATURES,
         "Peer": PEER_FEATURES[ticker]
     }
     block_names = list(blocks.keys())
@@ -86,18 +96,17 @@ def generate_diverse_combinations(ticker: str, n: int = 20, random_state: Option
         # Remove potential duplicates and ensure valid list
         combo = list(set(combo))
         
-        name_suffix = "_".join([name[:4] for name in selected_block_names])
-        subset_name = f"BLOCKS_{i+1}_{name_suffix}"
+        subset_id = i + 1
 
-        combinations[subset_name] = combo
+        combinations[subset_id] = combo
         
-    print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}): {list(combinations.keys())[:3]}...")
+    print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}) for {ticker}")
 
     return combinations
 
 
-def print_feature_sets(diverse_sets: Dict[str, List[str]]):
-    for k, v, in diverse_sets.items():
-        print(k)
-        print (v)
-        print("-------------")
+def print_feature_sets(ticker_diverse_sets: Dict[str, Dict[int, List[str]]]):
+    for ticker, diverse_sets in ticker_diverse_sets.items():
+        print(f"ֿ\nTicker: {ticker}")
+        for k, v, in diverse_sets.items():
+            print(f"{k}: {v}")
