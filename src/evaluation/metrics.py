@@ -162,20 +162,6 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=No
     }
 
 
-def print_eval(metrics: Dict[str, float], model_name: str = "Model"):
-    """Pretty-print evaluation metrics for reports."""
-    print(f"\n--- Performance: {model_name} ---")
-    print(f"MSE:  {metrics['MSE']:.6f} (Lower is better)")
-    print(f"RMSE: {metrics['RMSE']:.6f}")
-    print(f"MAE:  {metrics['MAE']:.6f}")
-    print(f"R2:   {metrics['R2']:.6f} (Higher is better)")
-    print(f"DA:   {metrics['Directional Accuracy']:.2%} (Directional Accuracy)")
-    print(f"Precision: {metrics['Precision']:.2%}  Recall: {metrics['Recall']:.2%}  F1: {metrics['F1']:.2%}")
-    print(f"IC:   {metrics['IC']:.4f} (Information Coefficient)")
-    print(f"Sharpe: {metrics['Strategy Sharpe']:.4f} (Annualized Strategy Return)")
-    print(f"Max Drawdown: {metrics['Max Drawdown']:.4f}")
-
-
 def evaluate_classification(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
     """Compute classification metrics."""
     # Ensure inputs are valid
