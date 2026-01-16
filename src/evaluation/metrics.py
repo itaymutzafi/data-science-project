@@ -6,7 +6,12 @@ Defines the business and technical metrics used in the project.
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, precision_score, recall_score, f1_score
-from typing import Dict, Any
+from typing import Dict
+
+# Metrics for each task, and if they are ascending
+CLS_METRICS = {"Accuracy": False, "Precision": False, "Recall": False}
+REG_METRICS = {"RMSE": True, "R2": False, "Directional Accuracy": False}
+
 
 def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
     """Compute (annualized) Sharpe ratio for a daily returns series.
@@ -109,7 +114,7 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=No
     correct_direction = np.sign(y_true) == np.sign(y_pred)
     da = np.mean(correct_direction)
 
-    if model_name is not None and model_name in {"NaiveBaseline", "MarketBenchmark"}:
+    if model_name is not None and model_name in {"NaiveBaseline", "MarketBenchmark", "RandomBaseline"}:
         precision = 0.0
         recall = 0.0
         f1 = 0.0
