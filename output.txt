@@ -1,0 +1,201 @@
+Constructing Features...
+Data for AAPL is up-to-date (covers 2020-01-01 to 2023-12-31). Using cached data.
+Data for MSFT is up-to-date (covers 2020-01-01 to 2023-12-31). Using cached data.
+Data for AMZN is up-to-date (covers 2020-01-01 to 2023-12-31). Using cached data.
+Data for GOOG is up-to-date (covers 2020-01-01 to 2023-12-31). Using cached data.
+['AAPL', 'MSFT', 'AMZN', 'GOOG']: Added Return and Log Return features
+Added Volatility features: [20] for 4 stocks.
+Note: Outliers capped at 3.0 sigma.
+Added Moving Average features: [20, 50, 200] for 4 stocks.
+Note: First 200 rows will contain NaNs (Warm-up Period).
+['AAPL', 'MSFT', 'AMZN', 'GOOG']: Added MACD feature
+ [Local] Calculating RSI...
+['AAPL', 'MSFT', 'AMZN', 'GOOG']: Added Day and Month features
+Running Feature Selection...
+
+==============================
+Forward selection for AAPL
+==============================
+[AAPL] Forward step 1
+[AAPL] Added: RSI | Accuracy: 0.5439
+[AAPL] Forward step 2
+[AAPL] Added: Day_sin | Accuracy: 0.5439
+[AAPL] Forward step 3
+[AAPL] Added: Day_cos | Accuracy: 0.5439
+[AAPL] Forward step 4
+[AAPL] Added: Vol_MA20 | Accuracy: 0.5373
+[AAPL] Forward step 5
+[AAPL] Added: Dist_MA50 | Accuracy: 0.5489
+[AAPL] Forward step 6
+[AAPL] Added: Log_Return | Accuracy: 0.5539
+[AAPL] Forward step 7
+[AAPL] Added: MACD_Hist | Accuracy: 0.5539
+[AAPL] Forward step 8
+[AAPL] Added: Month_cos | Accuracy: 0.5556
+[AAPL] Forward step 9
+[AAPL] Added: Return | Accuracy: 0.5572
+[AAPL] Forward step 10
+[AAPL] Added: Vol20 | Accuracy: 0.5439
+[AAPL] Forward step 11
+[AAPL] Added: Rel_Vol | Accuracy: 0.5506
+[AAPL] Forward step 12
+[AAPL] Added: Month_sin | Accuracy: 0.5257
+[AAPL] Forward step 13
+[AAPL] Added: MACD_Signal | Accuracy: 0.5191
+[AAPL] Forward step 14
+[AAPL] Added: MACD | Accuracy: 0.5191
+[AAPL] Forward step 15
+[AAPL] Added: Dist_MA200 | Accuracy: 0.5075
+
+==============================
+Forward selection for MSFT
+==============================
+[MSFT] Forward step 1
+[MSFT] Added: Vol20 | Accuracy: 0.5174
+[MSFT] Forward step 2
+[MSFT] Added: RSI | Accuracy: 0.5307
+[MSFT] Forward step 3
+[MSFT] Added: Day_sin | Accuracy: 0.5307
+[MSFT] Forward step 4
+[MSFT] Added: Day_cos | Accuracy: 0.5307
+[MSFT] Forward step 5
+[MSFT] Added: MACD_Hist | Accuracy: 0.5240
+[MSFT] Forward step 6
+[MSFT] Added: Dist_MA200 | Accuracy: 0.5240
+[MSFT] Forward step 7
+[MSFT] Added: Rel_Vol | Accuracy: 0.5174
+[MSFT] Forward step 8
+[MSFT] Added: Month_cos | Accuracy: 0.5257
+[MSFT] Forward step 9
+[MSFT] Added: Dist_MA50 | Accuracy: 0.5274
+[MSFT] Forward step 10
+[MSFT] Added: Vol_MA20 | Accuracy: 0.5257
+[MSFT] Forward step 11
+[MSFT] Added: Month_sin | Accuracy: 0.5257
+[MSFT] Forward step 12
+[MSFT] Added: MACD | Accuracy: 0.5207
+[MSFT] Forward step 13
+[MSFT] Added: MACD_Signal | Accuracy: 0.5174
+[MSFT] Forward step 14
+[MSFT] Added: Log_Return | Accuracy: 0.5124
+[MSFT] Forward step 15
+[MSFT] Added: Return | Accuracy: 0.5075
+
+==============================
+Forward selection for AMZN
+==============================
+[AMZN] Forward step 1
+[AMZN] Added: Month_cos | Accuracy: 0.5207
+[AMZN] Forward step 2
+[AMZN] Added: RSI | Accuracy: 0.5224
+[AMZN] Forward step 3
+[AMZN] Added: Vol_MA20 | Accuracy: 0.5290
+[AMZN] Forward step 4
+[AMZN] Added: Day_sin | Accuracy: 0.5290
+[AMZN] Forward step 5
+[AMZN] Added: Day_cos | Accuracy: 0.5290
+[AMZN] Forward step 6
+[AMZN] Added: Rel_Vol | Accuracy: 0.5224
+[AMZN] Forward step 7
+[AMZN] Added: Return | Accuracy: 0.5257
+[AMZN] Forward step 8
+[AMZN] Added: Log_Return | Accuracy: 0.5224
+[AMZN] Forward step 9
+[AMZN] Added: Month_sin | Accuracy: 0.5207
+[AMZN] Forward step 10
+[AMZN] Added: Vol20 | Accuracy: 0.5191
+[AMZN] Forward step 11
+[AMZN] Added: MACD_Hist | Accuracy: 0.5207
+[AMZN] Forward step 12
+[AMZN] Added: MACD | Accuracy: 0.4959
+[AMZN] Forward step 13
+[AMZN] Added: MACD_Signal | Accuracy: 0.4942
+[AMZN] Forward step 14
+[AMZN] Added: Dist_MA50 | Accuracy: 0.4942
+[AMZN] Forward step 15
+[AMZN] Added: Dist_MA200 | Accuracy: 0.4842
+
+==============================
+Forward selection for GOOG
+==============================
+[GOOG] Forward step 1
+[GOOG] Added: Dist_MA200 | Accuracy: 0.5141
+[GOOG] Forward step 2
+[GOOG] Added: MACD_Signal | Accuracy: 0.5174
+[GOOG] Forward step 3
+[GOOG] Added: Month_cos | Accuracy: 0.5257
+[GOOG] Forward step 4
+[GOOG] Added: RSI | Accuracy: 0.5290
+[GOOG] Forward step 5
+[GOOG] Added: Vol_MA20 | Accuracy: 0.5340
+[GOOG] Forward step 6
+[GOOG] Added: Month_sin | Accuracy: 0.5489
+[GOOG] Forward step 7
+[GOOG] Added: Day_sin | Accuracy: 0.5489
+[GOOG] Forward step 8
+[GOOG] Added: Day_cos | Accuracy: 0.5489
+[GOOG] Forward step 9
+[GOOG] Added: Rel_Vol | Accuracy: 0.5406
+[GOOG] Forward step 10
+[GOOG] Added: MACD | Accuracy: 0.5390
+[GOOG] Forward step 11
+[GOOG] Added: Dist_MA50 | Accuracy: 0.5489
+[GOOG] Forward step 12
+[GOOG] Added: MACD_Hist | Accuracy: 0.5340
+[GOOG] Forward step 13
+[GOOG] Added: Vol20 | Accuracy: 0.5290
+[GOOG] Forward step 14
+[GOOG] Added: Log_Return | Accuracy: 0.5141
+[GOOG] Forward step 15
+[GOOG] Added: Return | Accuracy: 0.5141
+
+Ticker: AAPL
+Top 8 features:
+  1. RSI
+  2. Day_sin
+  3. Day_cos
+  4. Vol_MA20
+  5. Dist_MA50
+  6. Log_Return
+  7. MACD_Hist
+  8. Month_cos
+
+Ticker: MSFT
+Top 8 features:
+  1. Vol20
+  2. RSI
+  3. Day_sin
+  4. Day_cos
+  5. MACD_Hist
+  6. Dist_MA200
+  7. Rel_Vol
+  8. Month_cos
+
+Ticker: AMZN
+Top 8 features:
+  1. Month_cos
+  2. RSI
+  3. Vol_MA20
+  4. Day_sin
+  5. Day_cos
+  6. Rel_Vol
+  7. Return
+  8. Log_Return
+
+Ticker: GOOG
+Top 8 features:
+  1. Dist_MA200
+  2. MACD_Signal
+  3. Month_cos
+  4. RSI
+  5. Vol_MA20
+  6. Month_sin
+  7. Day_sin
+  8. Day_cos
+
+=== VISUALIZATION & BONUS STRATEGY ===
+Traceback (most recent call last):
+  File "/Users/shakedschnarch/Documents/מסמכים מקומי/לימודים/תואר ראשון/מדמ״ח/שנה ג׳/סמסטר 5/Workshop in DS/repo/data-science-project/model_selection_draft.py", line 294, in <module>
+    df_results = pd.DataFrame(comparison_results).set_index('Ticker')
+                              ^^^^^^^^^^^^^^^^^^
+NameError: name 'comparison_results' is not defined
