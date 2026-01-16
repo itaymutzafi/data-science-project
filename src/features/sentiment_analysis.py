@@ -12,16 +12,17 @@ It provides a pipeline to:
 import logging
 import os
 from typing import List, Optional, Tuple, Any
-
 import numpy as np
 import pandas as pd
 import torch
 from transformers import pipeline
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-from src.config import TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH, SENTIMENT_CACHE, SAMPLES_PER_DAY, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW
+from src.config import TICKER_TO_COMPANY_MAP, SENTIMENT_CACHE, SAMPLES_PER_DAY, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, COMPANY_COLORS
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
-from src.evaluation import plots
+from src.utils import set_style
 
 # Sentiment Analysis Configuration
 # Note: Feature options are now handled in src.features.sets
@@ -446,7 +447,7 @@ def display_demo_sentiment(news_path: str, company: str, date: str, strict_match
     """Wrapper to display demo plots."""
     scored, score = get_demo_day_data(news_path, company, date, strict_match=strict_match)
     if not scored.empty:
-        plots.plot_day_sentiment_breakdown(scored, date, company, score)
+        plot_day_sentiment_breakdown(scored, date, company, score)
     else:
         print("No Data.")
 
@@ -606,3 +607,231 @@ def integrate_sentiment_data(
 
     return merged
 
+
+# --- plots ---
+def plot_sentiment_coverage_heatmap(daily_sentiment_df: pd.DataFrame) -> None:
+    """
+    Visualizes sentiment data availability (coverage) aggregated by month.
+    Darker cells indicate higher coverage (more days with news in that month).
+    """
+    set_style()
+    if daily_sentiment_df.empty:
+        print("No sentiment data to plot.")
+        return
+        
+    df = daily_sentiment_df.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # Create a monthly pivot table: % of days with news in that month
+    df['has_news'] = (df['news_count'] > 0).astype(int)
+    
+    # Group by Company and Month
+    pivot = df.set_index('date').groupby('company').resample('ME')['has_news'].mean().unstack(level=0)
+    
+    # Handle NaNs (months with no data context)
+    pivot = pivot.fillna(0)
+    
+    # Setup plot
+    plt.figure(figsize=(12, 5))
+    
+    # Create Heatmap
+    # cmap="Greens" gives a nice progression from white (0%) to dark green (100%)
+    ax = sns.heatmap(pivot.T, cmap="Greens", cbar_kws={'label': 'Coverage %'}, linewidths=0.5, linecolor='#eaeaea')
+    
+    # Format X-axis to show understandable dates (e.g., "Jan 2020")
+    # We define labels based on the columns (dates)
+    
+    # Get the timestamps from the columns
+    date_cols = pivot.index
+    
+    # Let seaborn/matplotlib handle the dates if possible, or force tick labels
+    # Since pivot.index is DatetimeIndex, we can format it.
+    
+    # Setting readable tick labels: Show every 6th month to avoid crowding
+    n_months = len(date_cols)
+    step = max(1, n_months // 10) # Aim for ~10 ticks max
+    
+    xticks = np.arange(0, n_months, step)
+    xlabels = [date_cols[i].strftime('%b %Y') for i in xticks]
+    
+    plt.xticks(xticks + 0.5, xlabels, rotation=0, ha='center', fontsize=10)
+    plt.yticks(rotation=0, fontsize=11, fontweight='bold')
+    
+    plt.title("Sentiment Data Coverage Intensity (Monthly)", fontsize=14, fontweight='bold', pad=15)
+    plt.xlabel("") # Date is obvious
+    plt.ylabel("") 
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_rolling_sentiment_correlation(
+    merged_df: pd.DataFrame | dict, 
+    sentiment_col: str = 'sentiment_mean_lag1',
+    return_col: str = 'Log_Return',
+    window: int = 60
+) -> None:
+    """
+    Plots the rolling correlation between sentiment and returns.
+    Supports either a single DataFrame (with 'Ticker' col or single asset)
+    or a dictionary of DataFrames {ticker: df}.
+    """
+    set_style()
+    plt.figure(figsize=(12, 6))
+    
+    # Handle Dictionary Input
+    if isinstance(merged_df, dict):
+        datas = merged_df
+        for ticker, df in datas.items():
+            df = df.copy()
+            if not isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except Exception:
+                    continue
+            
+            if sentiment_col not in df.columns or return_col not in df.columns:
+                continue
+                
+            subset = df.sort_index()
+            if len(subset) < window: continue
+            
+            rolling_corr = subset[sentiment_col].rolling(window).corr(subset[return_col])
+            
+            # Map ticker to company name for label if possible
+            company = TICKER_TO_COMPANY_MAP.get(ticker, ticker)
+            color = COMPANY_COLORS.get(company, COMPANY_COLORS.get(ticker, None))
+            
+            plt.plot(rolling_corr.index, rolling_corr, label=f"{company}", color=color)
+            
+    # Handle Single DataFrame Input
+    else:
+        df = merged_df.copy()
+        if not isinstance(df.index, pd.DatetimeIndex):
+            try:
+                df.index = pd.to_datetime(df.index)
+            except Exception:
+                pass
+                
+        if sentiment_col not in df.columns or return_col not in df.columns:
+            print(f"Columns {sentiment_col} or {return_col} missing.")
+            return
+        
+        tickers = df['Ticker'].unique() if 'Ticker' in df.columns else ['Portfolio']
+        
+        for ticker in tickers:
+            if 'Ticker' in df.columns:
+                subset = df[df['Ticker'] == ticker].sort_index()
+                label = ticker
+            else:
+                subset = df.sort_index()
+                label = "Portfolio"
+                
+            if len(subset) < window:
+                continue
+                
+            rolling_corr = subset[sentiment_col].rolling(window).corr(subset[return_col])
+            
+            company = TICKER_TO_COMPANY_MAP.get(ticker, ticker)
+            color = COMPANY_COLORS.get(company, COMPANY_COLORS.get(ticker, None))
+            
+            plt.plot(rolling_corr.index, rolling_corr, label=f"{company} (Reg={window}d)", color=color)
+
+    plt.axhline(0, color='black', linestyle='--', alpha=0.5)
+    plt.title(f"Rolling {window}-Day Correlation: Sentiment vs. Log Returns", fontsize=14, fontweight='bold')
+    plt.ylabel("Correlation Coefficient")
+    plt.legend(loc='best')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame) -> None:
+    """Plot raw and smoothed sentiment trends for the four companies."""
+    set_style()
+    if daily_sentiment_df.empty:
+        print("No sentiment data available to plot.")
+        return
+
+    df = daily_sentiment_df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    if "sentiment_ma_7d" not in df.columns:
+        df["sentiment_ma_7d"] = df.groupby("company")["sentiment_mean"].transform(lambda x: x.rolling(7, min_periods=1).mean())
+
+    companies = ["Apple", "Amazon", "Google", "Microsoft"]
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12), sharex=True, sharey=True)
+    axes_flat = axes.flatten()
+    grid_map = {"Apple": 0, "Amazon": 1, "Google": 2, "Microsoft": 3}
+
+    for company in companies:
+        if company not in grid_map:
+            continue
+        ax = axes_flat[grid_map[company]]
+        subset = df[df["company"] == company].sort_values("date")
+        if subset.empty:
+            ax.text(0.5, 0.5, "No Data Available", ha="center", va="center")
+            ax.set_title(company, fontweight="bold")
+            continue
+
+        color = COMPANY_COLORS.get(company, "blue")
+        raw_days = subset[subset["news_count"] > 0]
+        if not raw_days.empty:
+            ax.scatter(raw_days["date"], raw_days["sentiment_mean"], color=color, alpha=0.3, s=15, label="Daily Raw Sentiment")
+
+        trend_data = subset.dropna(subset=["sentiment_ma_7d"])
+        if not trend_data.empty:
+            ax.plot(trend_data["date"], trend_data["sentiment_ma_7d"], color=color, linewidth=2.5, label="7-Day Moving Avg")
+
+        ax.set_title(f"{company}", fontweight="bold", fontsize=12)
+        ax.axhline(0, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
+        ax.grid(True, alpha=0.3)
+        ax.tick_params(axis="x", rotation=45)
+        if grid_map[company] == 0:
+            ax.legend(loc="upper right", fontsize=9, framealpha=0.9)
+
+    fig.suptitle("Sentiment Trends: Raw Signals vs. Smoothed Trends", fontsize=16, fontweight="bold", y=0.98)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.98])
+    plt.show()
+
+
+def plot_day_sentiment_breakdown(daily_news_df: pd.DataFrame, date: str, company: str, daily_score: float) -> None:
+    """Show sentiment distribution and key headlines for a single day."""
+    set_style()
+    if daily_news_df.empty:
+        print(f"No news found for {company} on {date}")
+        return
+
+    scores = daily_news_df["sentiment_score"].values
+    fig = plt.figure(figsize=(14, 7))
+    grid = plt.GridSpec(1, 2, width_ratios=[1.2, 1])
+
+    ax1 = fig.add_subplot(grid[0])
+    sns.histplot(scores, kde=True, ax=ax1, color="skyblue", bins=10)
+    ax1.axvline(daily_score, color="red", linestyle="--", linewidth=2, label=f"Daily Mean: {daily_score:.2f}")
+    ax1.set_title(f"Sentiment Distribution: {company} on {date}", fontweight="bold")
+    ax1.set_xlabel("Sentiment Score (-1 to 1)")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2 = fig.add_subplot(grid[1])
+    ax2.axis("off")
+    daily_news_df = daily_news_df.drop_duplicates(subset=["headline"]).sort_values(by="sentiment_score", ascending=False)
+    top_pos = daily_news_df.head(3)
+    top_neg = daily_news_df.tail(3)
+
+    import textwrap
+
+    text_content = f"### Key Headlines ({len(daily_news_df)} Total)\n\n"
+    text_content += "**Most Positive:**\n"
+    for _, row in top_pos.iterrows():
+        short_headline = textwrap.shorten(row["headline"], width=60, placeholder="...")
+        text_content += f"(+{row['sentiment_score']:.2f}) {short_headline}\n"
+
+    text_content += "\n**Most Negative:**\n"
+    for _, row in top_neg.iterrows():
+        short_headline = textwrap.shorten(row["headline"], width=60, placeholder="...")
+        text_content += f"(-{abs(row['sentiment_score']):.2f}) {short_headline}\n"
+
+    ax2.text(0.05, 0.95, text_content, fontsize=10, va="top", ha="left", family="monospace")
+    plt.tight_layout()
+    plt.show()
