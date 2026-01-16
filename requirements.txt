@@ -10,6 +10,7 @@ feedparser
 datasets
 xgboost
 prophet
+plotly>=5.0.0
 
 # Financial data
 yfinance>=0.2.30
