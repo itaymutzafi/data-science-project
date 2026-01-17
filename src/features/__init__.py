@@ -9,7 +9,7 @@ from .reports import reports
 from .plots import avg_attr_by_time_plot, date_groupby_line_plot, articles_over_time_by_dataset_plot, article_volume_per_company_plot, \
     pie_plot, table_visualize
 from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, add_macro_features
-from .sets import generate_diverse_combinations, print_feature_sets
+from .sets import generate_diverse_combinations, print_feature_sets, build_feature_to_block_map
 from .targets import experiment_create_target_variable
 from .prophet import prophet
 
@@ -50,6 +50,7 @@ __all__ = [
     "add_macro_features",
     "generate_diverse_combinations",
     "print_feature_sets",
+    "build_feature_to_block_map",
     "sets",
     "experiment_create_target_variable",
     "prophet"

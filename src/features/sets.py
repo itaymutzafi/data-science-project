@@ -1,4 +1,4 @@
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import pandas as pd
 import random
 from src.config import SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, VOLATILITY_WINDOWS, FEATURE_WINDOWS
@@ -41,6 +41,22 @@ SENTIMENT_FEATURES = [
 ]
 PROPHET_FEATURES = ['prophet_prediction_binary', 'prophet_prediction_continuous']
 
+BLOCKS = {
+    "Basic": BASIC_FEATURES,
+    "Volume": VOLUME_FEATURE,
+    "Dividends": DIV_FEATURE,
+    "Splits": SPLIT_FEATURE,
+    "Time": TIME_FEATURES,
+    "Return": RETURN_FEATURES,
+    "Volatility": VOL_FEATURE,
+    "MovingAverage": MA_FEATURES,
+    "Momentum": MOMENTUM_FEATURES,
+    "Macro": MACRO_FEATURES,
+    "Report": REPORT_FEATURE,
+    "Sentiment": SENTIMENT_FEATURES,
+    "Prophet": PROPHET_FEATURES,
+    # "Peer" is added per ticker
+}
 
 def generate_diverse_combinations(dfs: Dict[str, pd.DataFrame], n: int, random_state) -> Dict[str, Dict[int, List[str]]]:
     ticker_diverse_sets = {}
@@ -64,22 +80,8 @@ def generate_diverse_combination_per_ticker(ticker: str, n: int = 20, random_sta
 
     combinations = {}
 
-    blocks = {
-        "Basic": BASIC_FEATURES,
-        "Volume": VOLUME_FEATURE,
-        "Dividends": DIV_FEATURE,
-        "Splits": SPLIT_FEATURE,
-        "Time": TIME_FEATURES,
-        "Return": RETURN_FEATURES,
-        "Volatility": VOL_FEATURE,
-        "MovingAverage": MA_FEATURES,
-        "Momentum": MOMENTUM_FEATURES,
-        "Macro": MACRO_FEATURES,
-        # "Report": REPORT_FEATURE,
-        "Sentiment": SENTIMENT_FEATURES,
-        # "Prophet": PROPHET_FEATURES,
-        "Peer": PEER_FEATURES[ticker]
-    }
+    blocks = BLOCKS.copy()
+    blocks["Peer"] = PEER_FEATURES[ticker]
     block_names = list(blocks.keys())
     
     for i in range(n):
@@ -110,3 +112,16 @@ def print_feature_sets(ticker_diverse_sets: Dict[str, Dict[int, List[str]]]):
         print(f"ֿ\nTicker: {ticker}")
         for k, v, in diverse_sets.items():
             print(f"{k}: {v}")
+
+
+def build_feature_to_block_map() -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    feature_to_block = {}
+
+    blocks = BLOCKS.copy()
+    blocks["Peer"] = sorted({f for features in PEER_FEATURES.values() for f in features})
+
+    for block, features in blocks.items():
+        for f in features:
+            feature_to_block[f] = block
+
+    return feature_to_block, blocks

@@ -1,12 +1,21 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple
 import matplotlib.pyplot as plt
+from itertools import combinations
+from collections import defaultdict
 from sklearn.linear_model import LogisticRegression
-from src.models import run_binary_cls_with_feature_importance
-from src.config import DEF_SPLITS, COMPANY_COLORS
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
+from sklearn.base import clone
+
+from src.models import run_binary_cls_with_feature_importance, run_binary_cls_embedded_importance
+from src.config import DEF_SPLITS, COMPANY_COLORS, TICKERS, SPLITS
+from src.features import build_feature_to_block_map
+
 
 EXCLUDE_TARGET_COLS = ["TargetRegression", "TargetBinary"]
+
 
 def forward_feature_selection(
     df: pd.DataFrame,
@@ -135,7 +144,7 @@ def feature_selection_plot(df: pd.DataFrame):
     plt.grid(True, alpha=0.3)
     plt.show()
 
-def get_best_k_features(df: pd.DataFrame, K: int=10) -> Dict[str, List[str]]:
+def get_best_k_features(df: pd.DataFrame, K: int=10, add_prints: bool = True) -> Dict[str, List[str]]:
     best_features = {}
 
     for ticker in df["Ticker"].unique():
@@ -147,9 +156,393 @@ def get_best_k_features(df: pd.DataFrame, K: int=10) -> Dict[str, List[str]]:
         feats = sub["AddedFeature"].head(K).tolist()
         best_features[ticker] = feats
 
-        print(f"\nTicker: {ticker}")
-        print(f"Top {K} features:")
-        for i, f in enumerate(feats, 1):
-            print(f"  {i}. {f}")
+        if add_prints:
+            print(f"\nTicker: {ticker}")
+            print(f"Top {K} features:")
+            for i, f in enumerate(feats, 1):
+                print(f"  {i}. {f}")
 
     return best_features
+
+
+def get_embedding_importance_features(
+    dfs: dict,
+    k: int = 10,
+    target_col: str = "TargetBinary",
+    model = None,
+    n_splits: int = DEF_SPLITS,
+    add_prints: bool = True
+) -> Dict[str, List[str]]:
+    if model is None:
+        model = LogisticRegression(max_iter=2000)
+
+    embedding_features = {}
+
+    for ticker, ticker_df in dfs.items():
+        imp = run_binary_cls_embedded_importance(
+            data=ticker_df,
+            target_col=target_col,
+            model=model,
+            ticker=ticker,
+            n_splits=n_splits,
+        )
+
+        if imp.empty:
+            embedding_features[ticker] = []
+            continue
+
+        top_features = (
+            imp.groupby("Feature")["Importance"]
+            .mean()
+            .sort_values(ascending=False)
+            .head(k)
+            .index
+            .tolist()
+        )
+
+        embedding_features[ticker] = top_features
+        if add_prints:
+            print(f"{ticker}: {top_features}")
+
+    return embedding_features
+
+
+def get_experimet_lr_best_features(
+    results_cls: pd.DataFrame,
+    ticker_diverse_sets: Dict[str, Dict[int, List[str]]],
+) -> Tuple[Dict[str, List[str]], Dict[str, float]]:
+    """
+    For each ticker:
+    - consider only LogisticRegression
+    - aggregate Accuracy over folds
+    - select the FeatureSet with highest mean Accuracy
+
+    Returns:
+        1) dict[ticker] -> list of feature names
+        2) dict[ticker] -> best accuracy
+    """
+    # 1. Filter to LogisticRegression only
+    df = results_cls[results_cls["Model"] == "LogisticRegression"].copy()
+
+    if df.empty:
+        raise ValueError("No LogisticRegression results found")
+
+    # 2. Aggregate Accuracy over folds
+    agg = (
+        df
+        .groupby(["Ticker", "FeatureSet"])["Accuracy"]
+        .mean()
+        .reset_index()
+    )
+
+    # 3. Pick best FeatureSet per ticker
+    best_per_ticker = (
+        agg
+        .sort_values("Accuracy", ascending=False)
+        .groupby("Ticker", as_index=False)
+        .first()
+    )
+
+    # 4. Build outputs
+    best_features = {}
+    best_accuracy = {}
+
+    for _, row in best_per_ticker.iterrows():
+        ticker = row["Ticker"]
+        fset_id = row["FeatureSet"]
+        acc = row["Accuracy"]
+
+        features = ticker_diverse_sets[ticker].get(fset_id)
+        best_features[ticker] = features
+        best_accuracy[ticker] = acc
+        print(f"{ticker}: {features}")
+
+    return best_features, best_accuracy
+
+
+def count_blocks(features_by_ticker: Dict[str, List[str]], feature_to_block: Dict[str, str]) -> Dict[str, int]:
+    """
+    Count how many times each block appears across all tickers.
+    """
+    counts = defaultdict(int)
+
+    for features in features_by_ticker.values():
+        for f in features:
+            block = feature_to_block.get(f)
+            if block:
+                counts[block] += 1
+
+    return counts
+
+
+def build_block_count_df(
+    experiment_features: Dict[str, List[str]],
+    embedded_features: Dict[str, List[str]],
+    wrapper_features: Dict[str, List[str]],
+) -> pd.DataFrame:
+    feature_to_block, blocks = build_feature_to_block_map()
+
+    exp_counts = count_blocks(experiment_features, feature_to_block)
+    emb_counts = count_blocks(embedded_features, feature_to_block)
+    wrap_counts = count_blocks(wrapper_features, feature_to_block)
+
+    all_blocks = sorted(blocks.keys())
+
+    df = pd.DataFrame({
+        "Block": all_blocks,
+        "Experiment": [exp_counts.get(b, 0) for b in all_blocks],
+        "Embedding": [emb_counts.get(b, 0) for b in all_blocks],
+        "FeatureSelection": [wrap_counts.get(b, 0) for b in all_blocks],
+    })
+
+    return df
+
+
+def plot_block_usage_stacked(df: pd.DataFrame):
+    plt.figure(figsize=(12, 7))
+    bottom = np.zeros(len(df))
+    colors = {
+        "Experiment": "#4C72B0",    
+        "Embedding": "#DD8452",        
+        "FeatureSelection": "#55A868", 
+    }
+
+    for col in ["Experiment", "Embedding", "FeatureSelection"]:
+        plt.bar(
+            df["Block"],
+            df[col],
+            bottom=bottom,
+            label=col,
+            color=colors[col],
+            edgecolor="none",   
+        )
+        bottom += df[col].values
+
+    plt.xlabel("Feature Block", fontsize=14, weight="bold")
+    plt.ylabel("Feature Count (across all tickers)", fontsize=14, weight="bold")
+    plt.title("Feature Block Usage by Selection Strategy", fontsize=16, weight="bold")
+
+    plt.xticks(rotation=35, ha="right", fontsize=12)
+    max_y = int(bottom.max())
+    plt.yticks(range(0, max_y + 1, 1), fontsize=12)
+
+    plt.legend(title="Source", fontsize=11, title_fontsize=12)
+    plt.grid(axis="y", alpha=0.25)
+
+    plt.tight_layout()
+    plt.show()
+
+
+def powerset(features: List[str]) -> List[List[str]]:
+    """
+    Return all non-empty subsets of features.
+    """
+    subsets = []
+    for r in range(1, len(features) + 1):
+        subsets.extend(combinations(features, r))
+    return [list(s) for s in subsets]
+
+
+def evaluate_feature_subsets(
+    data: pd.DataFrame,
+    target_col: str,
+    subsets: List[List[str]],
+    model,
+    ticker: str,
+    n_splits: int,
+) -> pd.DataFrame:
+    rows = []
+    data = data.dropna()
+
+    for subset_idx, features in enumerate(subsets):
+        df_sub = data[features + [target_col]]
+
+        res = run_binary_cls_with_feature_importance(
+            data=df_sub,
+            target_col=target_col,
+            model=model,
+            ticker=ticker,
+            n_splits=n_splits
+        )
+
+        acc = res["Accuracy"].mean()
+
+        rows.append({
+            "Ticker": ticker,
+            "SubsetIndex": subset_idx,
+            "NumFeatures": len(features),
+            "Accuracy": acc,
+            "Features": features,
+        })
+
+    return pd.DataFrame(rows)
+
+
+def get_subset_results(top_features: Dict[str, List[str]], dfs: Dict[str, pd.DataFrame]):
+    all_results = []
+
+    for ticker, feature_set in top_features.items():
+        subsets = powerset(feature_set)
+        print(f"{ticker}: {len(subsets)} subsets")
+
+        df_subsets = evaluate_feature_subsets(
+            data=dfs[ticker],
+            target_col="TargetBinary",
+            subsets=subsets,
+            model=LogisticRegression(),
+            ticker=ticker,
+            n_splits=SPLITS,
+        )
+
+        all_results.append(df_subsets)
+
+    return pd.concat(all_results, ignore_index=True)
+
+
+def get_all_top_features(
+    top_experiment_features: Dict[str, List[str]], 
+    forward_results_df: pd.DataFrame,
+    dfs: Dict[str, pd.DataFrame],
+    ticker_diverse_sets: Dict[str, List[str]],
+    k: int = 3
+) -> Dict[str, Set[str]]:
+    all_top_features = {}
+    top_embedding_features = get_best_k_features(forward_results_df, k, False)
+    top_wrapper_features = get_embedding_importance_features(dfs, k, add_prints=False)
+
+    for ticker, exp_features in top_experiment_features.items():
+        all_top_features[ticker] = set(exp_features).union(top_embedding_features[ticker], top_wrapper_features[ticker])
+        print(f"{ticker}: {all_top_features[ticker]}")
+    
+    return all_top_features
+
+
+def get_best_accuracy_feature_selection(
+    top_features_strategies: Dict[str, Set[str]],
+    dfs: Dict[str, pd.DataFrame],
+    top_experiment_accuracy: Dict[str, float],
+    forward_results_df: pd.DataFrame
+) -> pd.DataFrame:
+    rows = []
+
+    for top_name, top_features in top_features_strategies.items():
+        print(f"{top_name}:")
+        best_df = (
+            get_subset_results(top_features, dfs)
+            .sort_values("Accuracy", ascending=False)
+            .groupby("Ticker", as_index=False)
+            .first()
+            .rename(columns={
+                "Accuracy": "BestAccuracy"
+            })
+        )
+        best_subsets_df =  best_df[["Ticker", "BestAccuracy", "SubsetIndex", "Features"]]
+        print(f"Best found: \n{best_subsets_df.to_string(index=False)}\n") 
+
+        for _, row in best_subsets_df.iterrows():
+            rows.append({
+                "Source": top_name,
+                "Ticker": row["Ticker"],
+                "Accuracy": row["BestAccuracy"],
+            })
+
+    # --- ORIGINAL experiment baseline ---
+    for ticker, acc in top_experiment_accuracy.items():
+        rows.append({
+            "Source": "original_experiment",
+            "Ticker": ticker,
+            "Accuracy": acc,
+        })
+    
+    # --- ORIGINAL wrapper baseline ---
+    wrapper_accuracy_df = (
+        forward_results_df.groupby("Ticker")["Accuracy"]
+        .max()
+        .to_dict()
+    )
+    for ticker, acc in wrapper_accuracy_df.items():
+        rows.append({
+            "Source": "original_wrapper",
+            "Ticker": ticker,
+            "Accuracy": acc,
+        })
+
+    return pd.DataFrame(rows)
+
+
+def plot_accuracy_by_strategy(df: pd.DataFrame):
+    plt.figure(figsize=(12, 7))
+
+    sources = [
+        "original_experiment",
+        "top_experiment",
+        "top_embedding",
+        "original_wrapper",
+        "top_wrapper",
+        "all",
+    ]
+    x_pos = {s: i for i, s in enumerate(sources)}
+    jitter = 0.08
+
+    # Keep only sources we know (avoids KeyError / weird ordering)
+    dfp = df[df["Source"].isin(sources)].copy()
+
+    for ticker in dfp["Ticker"].unique():
+        sub = dfp[dfp["Ticker"] == ticker].copy()
+
+        # --- create stable jittered x per ROW ---
+        sub["_x"] = sub["Source"].map(x_pos) + np.random.uniform(-jitter, jitter, size=len(sub))
+
+        color = COMPANY_COLORS.get(ticker, "gray")
+
+        # --- plot all points using sub["_x"] ---
+        plt.scatter(
+            sub["_x"],
+            sub["Accuracy"],
+            color=color,
+            label=ticker,
+            s=120,
+            alpha=0.8,
+        )
+
+        # --- circle the BEST point using the SAME jittered x ---
+        best_i = sub["Accuracy"].idxmax()
+        best_x = sub.loc[best_i, "_x"]
+        best_y = sub.loc[best_i, "Accuracy"]
+
+        plt.scatter(
+            [best_x],
+            [best_y],
+            s=220,
+            facecolors="none",
+            edgecolors="black",
+            linewidths=2.0,
+            zorder=10,
+        )
+
+    plt.xticks(
+        ticks=list(x_pos.values()),
+        labels=list(x_pos.keys()),
+        fontsize=12,
+        rotation=20,
+    )
+
+    plt.xlabel("Strategy", fontsize=14, weight="bold")
+    plt.ylabel("Best Accuracy", fontsize=14, weight="bold")
+    plt.title("Best Accuracy by Feature-Selection Strategy", fontsize=16, weight="bold")
+
+    # Deduplicate legend
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(
+        by_label.values(),
+        by_label.keys(),
+        title="Ticker",
+        fontsize=11,
+        title_fontsize=12,
+        loc="upper left",
+    )
+
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.show()

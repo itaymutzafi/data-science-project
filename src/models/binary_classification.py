@@ -2,6 +2,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.base import clone
 import pandas as pd
+import numpy as np
 from src.evaluation.metrics import evaluate_classification
 from sklearn.linear_model import LogisticRegression
 from xgboost.sklearn import XGBClassifier
@@ -56,6 +57,69 @@ def run_binary_cls_with_feature_importance(
         })
 
     return pd.DataFrame(all_results)
+
+
+def run_binary_cls_embedded_importance(
+    data: pd.DataFrame,
+    target_col: str,
+    model,
+    ticker: str,
+    n_splits: int = DEF_SPLITS
+) -> pd.DataFrame:
+    data = data.dropna()
+    X = data.drop(columns=[target_col])
+    y = data[target_col]
+
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    all_importances = []
+
+    for fold, (train_idx, _) in enumerate(tscv.split(X)):
+        X_train = X.iloc[train_idx]
+        y_train = y.iloc[train_idx]
+
+        # -----------------------
+        # Scaling (train only)
+        # -----------------------
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+
+        X_train_df = pd.DataFrame(
+            X_train_scaled,
+            index=X_train.index,
+            columns=X.columns,
+        )
+
+        # -----------------------
+        # Train model
+        # -----------------------
+        model_fold = clone(model)
+        model_fold.fit(X_train_df, y_train)
+
+        # -----------------------
+        # Embedded importance
+        # -----------------------
+        if hasattr(model_fold, "coef_"):
+            importance = np.abs(model_fold.coef_).ravel()
+
+        elif hasattr(model_fold, "feature_importances_"):
+            importance = model_fold.feature_importances_
+
+        else:
+            continue  # model has no embedded importance
+
+        fold_df = pd.DataFrame({
+            "Feature": X.columns,
+            "Importance": importance,
+            "Fold": fold,
+            "Ticker": ticker,
+        })
+
+        all_importances.append(fold_df)
+
+    if not all_importances:
+        return pd.DataFrame(columns=["Feature", "Importance", "Fold", "Ticker"])
+
+    return pd.concat(all_importances, ignore_index=True)
 
 
 models_for_target = [LogisticRegression()] #, XGBClassifier()]
