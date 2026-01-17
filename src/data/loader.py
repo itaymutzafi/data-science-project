@@ -54,22 +54,38 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
         years_diff = (end_time - start_time).days / 365.25
         print(f"Fetching {years_diff:.1f} year(s) of data for {ticker_name} from yfinance...")
         
-    # Download data
-    df = ticker.history(start = start_time, end = end_time)
-    
-    if df.empty:
-        raise ValueError(f"No data found for ticker {ticker_name}")
+    # Download data with fallback
+    try:
+        df = ticker.history(start = start_time, end = end_time)
         
-    # Remove timezone for simplicity in plots and saving
-    df.index = df.index.tz_localize(None)
-    
-    # Save to cache
-    if save_file:
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(cache_path)
-        print(f"Saved {ticker_name} data to {cache_path}")
-    
-    return df
+        if df.empty:
+            raise ValueError(f"No data found for ticker {ticker_name}")
+            
+        # Remove timezone for simplicity in plots and saving
+        df.index = df.index.tz_localize(None)
+        
+        # Save to cache
+        if save_file:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            df.to_parquet(cache_path)
+            print(f"Saved {ticker_name} data to {cache_path}")
+        
+        return df
+
+    except Exception as e:
+        print(f"Failed to fetch data for {ticker_name} from yfinance: {e}")
+        
+        if cache_path.exists():
+            print(f"WARNING: Falling back to EXISTING CACHE for {ticker_name}. Data coverage might be incomplete.")
+            df = pd.read_parquet(cache_path)
+            
+            # Ensure index is timezone-naive for consistency
+            if df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
+            return df
+        else:
+            print(f"CRITICAL: No local cache available for {ticker_name} to fallback to.")
+            raise e
 
 
 def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.DataFrame:
