@@ -169,16 +169,18 @@ def get_embedding_importance_features(
     dfs: dict,
     k: int = 10,
     target_col: str = "TargetBinary",
-    model = None,
+    model=None,
     n_splits: int = DEF_SPLITS,
     add_prints: bool = True
-) -> Dict[str, List[str]]:
+):
     if model is None:
-        model = LogisticRegression(max_iter=2000)
+        model = LogisticRegression()
 
     embedding_features = {}
+    embedding_accuracy = {}
 
     for ticker, ticker_df in dfs.items():
+        # --- 1. Get feature importance ---
         imp = run_binary_cls_embedded_importance(
             data=ticker_df,
             target_col=target_col,
@@ -189,6 +191,7 @@ def get_embedding_importance_features(
 
         if imp.empty:
             embedding_features[ticker] = []
+            embedding_accuracy[ticker] = np.nan
             continue
 
         top_features = (
@@ -201,10 +204,26 @@ def get_embedding_importance_features(
         )
 
         embedding_features[ticker] = top_features
-        if add_prints:
-            print(f"{ticker}: {top_features}")
 
-    return embedding_features
+        # --- 2. Evaluate accuracy using same pipeline ---
+        res = run_binary_cls_with_feature_importance(
+            data=ticker_df[top_features + [target_col]],
+            target_col=target_col,
+            model=model,
+            ticker=ticker,
+            n_splits=n_splits
+        )
+
+        embedding_accuracy[ticker] = res["Accuracy"].mean()
+
+        if add_prints:
+            print(
+                f"{ticker}: "
+                f"Accuracy={embedding_accuracy[ticker]:.4f} | "
+                f"Top-{k} features={top_features}"
+            )
+
+    return embedding_features, embedding_accuracy
 
 
 def get_experimet_lr_best_features(
@@ -350,22 +369,33 @@ def evaluate_feature_subsets(
     model,
     ticker: str,
     n_splits: int,
+    original_features: List[str],
+    original_accuracy: float,
 ) -> pd.DataFrame:
     rows = []
     data = data.dropna()
+    original_set = set(original_features)
 
     for subset_idx, features in enumerate(subsets):
-        df_sub = data[features + [target_col]]
+        feature_set = set(features)
 
-        res = run_binary_cls_with_feature_importance(
-            data=df_sub,
-            target_col=target_col,
-            model=model,
-            ticker=ticker,
-            n_splits=n_splits
-        )
+        # --- CASE 1: this is the original best set ---
+        if feature_set == original_set:
+            acc = original_accuracy
 
-        acc = res["Accuracy"].mean()
+        # --- CASE 2: evaluate normally ---
+        else:
+            df_sub = data[features + [target_col]]
+
+            res = run_binary_cls_with_feature_importance(
+                data=df_sub,
+                target_col=target_col,
+                model=model,
+                ticker=ticker,
+                n_splits=n_splits
+            )
+
+            acc = res["Accuracy"].mean()
 
         rows.append({
             "Ticker": ticker,
@@ -378,7 +408,11 @@ def evaluate_feature_subsets(
     return pd.DataFrame(rows)
 
 
-def get_subset_results(top_features: Dict[str, List[str]], dfs: Dict[str, pd.DataFrame]):
+def get_subset_results(
+    top_features: Dict[str, List[str]],
+    dfs: Dict[str, pd.DataFrame],
+    original_accuracy: Dict[str, float],
+):
     all_results = []
 
     for ticker, feature_set in top_features.items():
@@ -392,11 +426,14 @@ def get_subset_results(top_features: Dict[str, List[str]], dfs: Dict[str, pd.Dat
             model=LogisticRegression(),
             ticker=ticker,
             n_splits=SPLITS,
+            original_features=feature_set,
+            original_accuracy=original_accuracy[ticker],
         )
 
         all_results.append(df_subsets)
 
     return pd.concat(all_results, ignore_index=True)
+
 
 
 def get_all_top_features(
@@ -408,7 +445,7 @@ def get_all_top_features(
 ) -> Dict[str, Set[str]]:
     all_top_features = {}
     top_embedding_features = get_best_k_features(forward_results_df, k, False)
-    top_wrapper_features = get_embedding_importance_features(dfs, k, add_prints=False)
+    top_wrapper_features, _ = get_embedding_importance_features(dfs, k, add_prints=False)
 
     for ticker, exp_features in top_experiment_features.items():
         all_top_features[ticker] = set(exp_features).union(top_embedding_features[ticker], top_wrapper_features[ticker])
@@ -421,6 +458,7 @@ def get_best_accuracy_feature_selection(
     top_features_strategies: Dict[str, Set[str]],
     dfs: Dict[str, pd.DataFrame],
     top_experiment_accuracy: Dict[str, float],
+    top_10_embedding_accuracy: Dict[str, float],
     forward_results_df: pd.DataFrame
 ) -> pd.DataFrame:
     rows = []
@@ -428,7 +466,7 @@ def get_best_accuracy_feature_selection(
     for top_name, top_features in top_features_strategies.items():
         print(f"{top_name}:")
         best_df = (
-            get_subset_results(top_features, dfs)
+            get_subset_results(top_features, dfs, top_10_embedding_accuracy)
             .sort_values("Accuracy", ascending=False)
             .groupby("Ticker", as_index=False)
             .first()
@@ -466,6 +504,14 @@ def get_best_accuracy_feature_selection(
             "Ticker": ticker,
             "Accuracy": acc,
         })
+    
+    # --- ORIGINAL embedding baseline ---
+    for ticker, acc in top_10_embedding_accuracy.items():
+        rows.append({
+            "Source": "original_embedding",
+            "Ticker": ticker,
+            "Accuracy": acc,
+        })
 
     return pd.DataFrame(rows)
 
@@ -476,9 +522,10 @@ def plot_accuracy_by_strategy(df: pd.DataFrame):
     sources = [
         "original_experiment",
         "top_experiment",
-        "top_embedding",
+        "original_embedding",
+        "top_10_embedding",
         "original_wrapper",
-        "top_wrapper",
+        "top_10_wrapper",
         "all",
     ]
     x_pos = {s: i for i, s in enumerate(sources)}
