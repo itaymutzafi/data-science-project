@@ -8,7 +8,8 @@ from .binary_classification import run_binary_cls_with_feature_importance, run_b
 from .targets import check_targets
 from .feature_selection import run_feature_selection, feature_selection_plot, get_best_k_features, get_all_top_features, \
     get_embedding_importance_features, get_experimet_lr_best_features, build_block_count_df, plot_block_usage_stacked, \
-    get_subset_results, get_best_accuracy_feature_selection, plot_accuracy_by_strategy
+    get_subset_results, get_best_accuracy_feature_selection, plot_accuracy_by_strategy, run_forward_selection_per_fold, \
+    plot_forward_selection_per_fold
 
 __all__ = [
     "baselines",
@@ -34,5 +35,7 @@ __all__ = [
     "plot_block_usage_stacked",
     "get_subset_results",
     "get_best_accuracy_feature_selection",
-    "plot_accuracy_by_strategy"
+    "plot_accuracy_by_strategy",
+    "run_forward_selection_per_fold",
+    "plot_forward_selection_per_fold"
 ]

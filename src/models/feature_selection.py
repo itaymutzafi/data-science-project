@@ -2,15 +2,15 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Set, Tuple
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from itertools import combinations
 from collections import defaultdict
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.preprocessing import StandardScaler
-from sklearn.base import clone
+import colorsys
 
 from src.models import run_binary_cls_with_feature_importance, run_binary_cls_embedded_importance
-from src.config import DEF_SPLITS, COMPANY_COLORS, TICKERS, SPLITS
+from src.config import DEF_SPLITS, COMPANY_COLORS, SPLITS
 from src.features import build_feature_to_block_map
 
 
@@ -311,7 +311,7 @@ def build_block_count_df(
         "Block": all_blocks,
         "Experiment": [exp_counts.get(b, 0) for b in all_blocks],
         "Embedding": [emb_counts.get(b, 0) for b in all_blocks],
-        "FeatureSelection": [wrap_counts.get(b, 0) for b in all_blocks],
+        "Wrapper": [wrap_counts.get(b, 0) for b in all_blocks],
     })
 
     return df
@@ -323,10 +323,10 @@ def plot_block_usage_stacked(df: pd.DataFrame):
     colors = {
         "Experiment": "#4C72B0",    
         "Embedding": "#DD8452",        
-        "FeatureSelection": "#55A868", 
+        "Wrapper": "#55A868", 
     }
 
-    for col in ["Experiment", "Embedding", "FeatureSelection"]:
+    for col in ["Experiment", "Embedding", "Wrapper"]:
         plt.bar(
             df["Block"],
             df[col],
@@ -593,3 +593,181 @@ def plot_accuracy_by_strategy(df: pd.DataFrame):
     plt.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     plt.show()
+
+
+def forward_feature_selection_per_fold(
+    df: pd.DataFrame,
+    target_col: str,
+    model,
+    ticker: str,
+    max_features: int | None = None,
+    n_splits: int = SPLITS
+) -> pd.DataFrame:
+
+    rows = []
+    selected_features = []
+
+    candidate_features = [
+        c for c in df.columns
+        if c not in [target_col] and c not in EXCLUDE_TARGET_COLS
+    ]
+
+    max_features = max_features or len(candidate_features)
+
+    for step in range(1, max_features + 1):
+        print(f"[{ticker}] Forward step {step}")
+
+        best_feat = None
+        best_mean_score = -np.inf
+        best_fold_scores = None
+
+        for feat in candidate_features:
+            trial_features = selected_features + [feat]
+            df_sub = df[trial_features + [target_col]]
+
+            res = run_binary_cls_with_feature_importance(
+                data=df_sub,
+                target_col=target_col,
+                model=model,
+                ticker=ticker,
+                n_splits=n_splits
+            )
+
+            mean_score = res["Accuracy"].mean()
+
+            if mean_score > best_mean_score:
+                best_mean_score = mean_score
+                best_feat = feat
+                best_fold_scores = res[["Fold", "Accuracy"]]
+
+        # update state
+        selected_features.append(best_feat)
+        candidate_features.remove(best_feat)
+
+        # store per-fold results
+        for _, row in best_fold_scores.iterrows():
+            rows.append({
+                "Ticker": ticker,
+                "Step": step,
+                "NumFeatures": len(selected_features),
+                "Fold": int(row["Fold"]),
+                "Accuracy": row["Accuracy"],
+                "AddedFeature": best_feat,
+            })
+
+        print(f"[{ticker}] Added: {best_feat} | Mean Accuracy: {best_mean_score:.4f}")
+
+    return pd.DataFrame(rows)
+
+def run_forward_selection_per_fold(
+    dfs: Dict[str, pd.DataFrame],
+    n_splits: int = SPLITS
+) -> pd.DataFrame:
+
+    all_results = []
+
+    for ticker, df in dfs.items():
+        print(f"\n==============================")
+        print(f"Forward selection (per fold) for {ticker}")
+        print(f"==============================")
+
+        df = df.copy()
+        df["TargetBinary"] = (df["Log_Return"].shift(-1) > 0).astype(int)
+        df = df.dropna()
+
+        hist_df = forward_feature_selection_per_fold(
+            df=df,
+            target_col="TargetBinary",
+            model=LogisticRegression(max_iter=2000, random_state=42),
+            ticker=ticker,
+            n_splits=n_splits
+        )
+
+        all_results.append(hist_df)
+
+    return pd.concat(all_results, ignore_index=True)
+
+def get_fold_time_ranges(
+    df: pd.DataFrame,
+    n_splits: int
+) -> pd.DataFrame:
+    tscv = TimeSeriesSplit(n_splits=n_splits)
+    rows = []
+
+    for fold, (train_idx, val_idx) in enumerate(tscv.split(df)):
+        val_dates = df.index[val_idx]
+
+        rows.append({
+            "Fold": fold,
+            "ValStart": val_dates.min(),
+            "ValEnd": val_dates.max(),
+        })
+
+    return pd.DataFrame(rows)
+
+def sequential_colors_strong(base_color: str, n: int):
+    """
+    Generate n clearly distinct sequential colors
+    from a single base color using HLS space.
+    """
+    r, g, b = mcolors.to_rgb(base_color)
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+
+    colors = []
+    for i in range(n):
+        # lightness: from light to dark
+        li = 0.75 - 0.45 * (i / max(n - 1, 1))
+        # saturation: slightly increasing
+        si = min(1.0, s + 0.2 * (i / max(n - 1, 1)))
+
+        ri, gi, bi = colorsys.hls_to_rgb(h, li, si)
+        colors.append((ri, gi, bi))
+
+    return colors
+
+def plot_forward_selection_per_fold(
+    fs_fold_df: pd.DataFrame,
+    dfs: dict,
+    n_splits: int = SPLITS,
+):
+    for ticker in fs_fold_df["Ticker"].unique():
+        sub = fs_fold_df[fs_fold_df["Ticker"] == ticker]
+
+        # rebuild df exactly as in training
+        df = dfs[ticker].copy()
+        df["TargetBinary"] = (df["Log_Return"].shift(-1) > 0).astype(int)
+        df = df.dropna()
+
+        fold_ranges = get_fold_time_ranges(df, n_splits)
+
+        # --- company color palette ---
+        base_color = COMPANY_COLORS.get(ticker, "#333333")
+        fold_colors = sequential_colors_strong(base_color, n_splits)
+
+        plt.figure(figsize=(8, 5))
+
+        for fold in sorted(sub["Fold"].unique()):
+            fold_df = sub[sub["Fold"] == fold]
+            fr = fold_ranges[fold_ranges["Fold"] == fold].iloc[0]
+
+            label = (
+                f"Fold {fold + 1}: "
+                f"{fr.ValStart.date()} → {fr.ValEnd.date()}"
+            )
+
+            plt.plot(
+                fold_df["NumFeatures"],
+                fold_df["Accuracy"],
+                marker="o",
+                linewidth=2,
+                color=fold_colors[fold],
+                label=label
+            )
+
+        plt.xlabel("Number of Features")
+        plt.ylabel("Accuracy")
+        plt.title(f"{ticker} – Forward Selection per Fold")
+        plt.legend(fontsize=9)
+        plt.grid(alpha=0.3)
+        plt.tight_layout()
+        plt.show()
