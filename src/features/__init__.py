@@ -1,7 +1,7 @@
 from .sentiment_analysis import display_demo_sentiment, generate_daily_sentiment_features, get_sentiment_coverage_stats, get_demo_day_data, \
     integrate_sentiment_data, run_sentiment_pipeline_for_report, verify_feature_integration, verify_unified_data, \
     plot_sentiment_coverage_heatmap, plot_rolling_sentiment_correlation, plot_sentiment_trends, plot_day_sentiment_breakdown
-from .day_month import add_day_month_features, preprocess_day_feature
+from .day_month import add_day_month_features, preprocess_day_feature, preprocess_month_feature
 from .log_return import add_return_features, return_day_boxplot, test_return_seasonality
 from .volatility import add_volatility_features, volatility_comparison_plot
 from .moving_average import add_ma_features, add_macd_feature, ma_plot, macd_plot
@@ -28,6 +28,7 @@ __all__ = [
     "plot_day_sentiment_breakdown",
     "add_day_month_features",
     "preprocess_day_feature",
+    "preprocess_month_feature",
     "add_return_features",
     "return_day_boxplot",
     "test_return_seasonality",

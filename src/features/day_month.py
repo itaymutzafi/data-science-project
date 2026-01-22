@@ -20,7 +20,6 @@ def preprocess_day_feature(df: pd.DataFrame) -> pd.DataFrame:
     Encode day-of-week cyclically using sine and cosine.
     Requires a 'Day' column with values like 'Monday', 'Tuesday', etc.
     """
-
     if "Day" not in df.columns:
         return df
 
@@ -31,5 +30,24 @@ def preprocess_day_feature(df: pd.DataFrame) -> pd.DataFrame:
     df["Day_cos"] = np.cos(2 * np.pi * day_num / 7)
 
     df = df.drop(columns=["Day"])
+
+    return df
+
+
+def preprocess_month_feature(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Encode month cyclically using sine and cosine.
+    Requires a 'Month' column with integer values 1–12.
+    """
+    if "Month" not in df.columns:
+        return df
+
+    df = df.copy()
+    month_num = df["Month"].astype(int)
+
+    df["Month_sin"] = np.sin(2 * np.pi * month_num / 12)
+    df["Month_cos"] = np.cos(2 * np.pi * month_num / 12)
+
+    df = df.drop(columns=["Month"])
 
     return df
