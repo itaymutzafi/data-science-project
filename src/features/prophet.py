@@ -5,14 +5,49 @@ import pandas as pd
 from typing import Dict
 from yfinance import Ticker 
 from datetime import date
+from pathlib import Path
 
-from src.config import START_DATE, END_DATE, DEF_SPLITS
+from src.config import START_DATE, END_DATE, DEF_SPLITS, PROJECT_ROOT
 from src.data import fetch_sample_data
 from src.features import add_return_features
 
+def _get_prophet_cache_path(ticker: str) -> Path:
+    cache_dir = PROJECT_ROOT / "data" / "raw" / "prophet"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{ticker}_prophet_predictions.parquet"
 
-def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS):
+def _load_prophet_cache(ticker: str) -> pd.DataFrame:
+    cache_path = _get_prophet_cache_path(ticker)
+    if not cache_path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_parquet(cache_path)
+        if not df.empty:
+            df.index = pd.to_datetime(df.index)
+        return df
+    except Exception as exc:
+        print(f"Warning: failed to load prophet cache for {ticker}: {exc}")
+        return pd.DataFrame()
+
+def _save_prophet_cache(ticker: str, df: pd.DataFrame) -> None:
+    cache_path = _get_prophet_cache_path(ticker)
+    df.to_parquet(cache_path)
+
+def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS, force_refresh: bool = False):
+    cols = ["prophet_prediction_binary", "prophet_prediction_continuous"]
     for stock_name, stock_df in stocks_data.items():
+        # cached logic ->
+        if not force_refresh:
+            cached = _load_prophet_cache(stock_name)
+            if not cached.empty:
+                stock_df = stock_df.drop(columns=[c for c in cols if c in stock_df.columns])
+                stock_df = stock_df.join(cached[cols], how="left")
+                stocks_data[stock_name] = stock_df
+                print("successfully imported cached prophet data")
+                continue
+        
+        # else - create new prophet columns ->
+
         ticker = Ticker(stock_name)
         proph_start_time = date(2015, 1, 1)
 
@@ -93,8 +128,14 @@ def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS):
         df_target_indexed = df_target.set_index("Date")
         df_target_indexed.index = pd.to_datetime(df_target_indexed.index)
 
+        _save_prophet_cache(
+            stock_name,
+            df_target_indexed[["prophet_prediction_binary", "prophet_prediction_continuous"]]
+        )
+
+        stock_df = stock_df.drop(columns=[c for c in cols if c in stock_df.columns])
         stock_df = stock_df.join(
-            df_target_indexed[["prophet_prediction_binary", "prophet_prediction_continuous"]],
+            df_target_indexed[cols],
             how="left"
         )
         stocks_data[stock_name] = stock_df
