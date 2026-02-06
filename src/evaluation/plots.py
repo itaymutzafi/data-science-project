@@ -70,7 +70,10 @@ def plot_walk_forward_validation(n_splits: int = DEF_SPLITS, total_samples: int 
     plt.show()
 
 
-def plot_return_distributions(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
+def plot_return_distributions(
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
+    title: str = "Log-Return Distributions by Ticker",
+) -> None:
     """KDE of log-return distributions across tickers."""
     set_style()
     df = ensure_dataframe(df)
@@ -81,14 +84,18 @@ def plot_return_distributions(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> Non
     plt.figure(figsize=(10, 5))
     for ticker, group in df.groupby("Ticker"):
         sns.kdeplot(group["Log_Return"].dropna(), label=ticker, color=COMPANY_COLORS.get(ticker, None))
-    plt.title("Log Return Distributions by Ticker", fontsize=16)
-    plt.xlabel("Log Return")
+    plt.title(title, fontsize=16, fontweight="bold")
+    plt.xlabel("Daily Log Return")
+    plt.axvline(0, color="black", linestyle="--", linewidth=0.8, alpha=0.6)
     plt.legend()
     plt.tight_layout()
     plt.show()
 
 
-def plot_correlation_heatmap(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None:
+def plot_correlation_heatmap(
+    df: pd.DataFrame | Dict[str, pd.DataFrame],
+    method: str = "pearson",
+) -> None:
     """Correlation heatmap of log returns across tickers."""
     set_style()
     df = ensure_dataframe(df)
@@ -102,10 +109,19 @@ def plot_correlation_heatmap(df: pd.DataFrame | Dict[str, pd.DataFrame]) -> None
     if pivot_ret.empty:
         print("No log return data available to plot correlation heatmap.")
         return
-    corr = pivot_ret.corr().round(2)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(corr, annot=True, cmap="Blues", vmin=-1, vmax=1, linewidths=0.5)
-    plt.title("Correlation of Log Returns", fontsize=16)
+    corr = pivot_ret.corr(method=method).round(2)
+    plt.figure(figsize=(6.5, 5.5))
+    sns.heatmap(
+        corr,
+        annot=True,
+        cmap="RdBu_r",
+        vmin=-1,
+        vmax=1,
+        center=0,
+        linewidths=0.5,
+        cbar_kws={"label": f"{method.title()} correlation"},
+    )
+    plt.title(f"Cross-Ticker Log-Return Correlation ({method.title()})", fontsize=16, fontweight="bold")
     plt.tight_layout()
     plt.show()
 
