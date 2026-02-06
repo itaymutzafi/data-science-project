@@ -142,7 +142,9 @@ def feature_selection_plot(df: pd.DataFrame):
     plt.title("Forward Selection – Best Feature Count per Ticker")
     plt.legend()
     plt.grid(True, alpha=0.3)
+    
     plt.show()
+    plt.close()
 
 def get_best_k_features(df: pd.DataFrame, K: int=10, add_prints: bool = True) -> Dict[str, List[str]]:
     best_features = {}
@@ -268,10 +270,21 @@ def get_experimet_lr_best_features(
 
     for _, row in best_per_ticker.iterrows():
         ticker = row["Ticker"]
-        fset_id = row["FeatureSet"]
+
+        # FeatureSet is stored as string in results CSV; convert to int to match
+        # the keys inside ticker_diverse_sets (1..n). If conversion fails or the
+        # id is missing, raise a clear error instead of returning None later.
+        try:
+            fset_id = int(row["FeatureSet"])
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid FeatureSet id for ticker {ticker}: {row['FeatureSet']}")
+
         acc = row["Accuracy"]
 
         features = ticker_diverse_sets[ticker].get(fset_id)
+        if features is None:
+            raise KeyError(f"FeatureSet {fset_id} not found for ticker {ticker} in ticker_diverse_sets")
+
         best_features[ticker] = features
         best_accuracy[ticker] = acc
         print(f"{ticker}: {features}")
@@ -349,7 +362,9 @@ def plot_block_usage_stacked(df: pd.DataFrame):
     plt.grid(axis="y", alpha=0.25)
 
     plt.tight_layout()
+    
     plt.show()
+    plt.close()
 
 
 def powerset(features: List[str]) -> List[List[str]]:
@@ -592,7 +607,9 @@ def plot_accuracy_by_strategy(df: pd.DataFrame):
 
     plt.grid(axis="y", alpha=0.3)
     plt.tight_layout()
+    
     plt.show()
+    plt.close()
 
 
 def forward_feature_selection_per_fold(
@@ -770,4 +787,6 @@ def plot_forward_selection_per_fold(
         plt.legend(fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()
+        
         plt.show()
+        plt.close()

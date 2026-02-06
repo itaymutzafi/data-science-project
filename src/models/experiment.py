@@ -5,6 +5,8 @@ combinations of time-series data (tickers), feature sets, and machine learning m
 """
 
 import logging
+import os
+import csv
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
@@ -86,6 +88,15 @@ class ExperimentRunner:
         self.raw_dfs = df_dict
         self.config = config
         self.results: List[Dict[str, Any]] = []
+        
+        # Checkpoint file setup
+        # Use a target-specific checkpoint to avoid mixing classification and regression runs
+        suffix = f"{self.config.target_type}_{self.config.target_horizon}d"
+        self.checkpoint_path = f"data/processed/experiment_checkpoint_{suffix}.csv"
+        
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(self.checkpoint_path), exist_ok=True)
+
 
     def _prepare_data(self, ticker: str, feature_set: List[str]) -> Tuple[pd.DataFrame, str, List[str]]:
         """Prepares X and y for a specific ticker and feature set.
@@ -156,10 +167,35 @@ class ExperimentRunner:
                 f"Incompatible models for target_type '{self.config.target_type}': {incompatible}"
             )
 
+        # Calculate exact total steps based on actual feature sets provided
         total_steps = sum(
-            len(self.config.feature_sets[ticker]) * len(self.config.models)
-            for ticker in self.config.tickers
-        )
+            len(fsets) for fsets in self.config.feature_sets.values()
+        ) * len(self.config.models)
+        
+        # Load completed jobs to skip (resume support)
+        completed_jobs = set()
+        if os.path.exists(self.checkpoint_path):
+            try:
+                # Read only needed columns to check existence, skipping corrupted lines
+                try:
+                    df_existing = pd.read_csv(
+                        self.checkpoint_path,
+                        usecols=["Ticker", "FeatureSet", "Model"],
+                        on_bad_lines="skip",
+                    )
+                except TypeError:
+                    # Fallback for older pandas versions
+                    df_existing = pd.read_csv(
+                        self.checkpoint_path,
+                        usecols=["Ticker", "FeatureSet", "Model"],
+                        error_bad_lines=False,
+                    )
+                # Signature uses FeatureSet id (not feature list) to match stored rows
+                for _, row in df_existing.iterrows():
+                    completed_jobs.add((row["Ticker"], int(row["FeatureSet"]), row["Model"]))
+                logger.info(f"Resuming experiment. Found {len(completed_jobs)} completed entries (folds).")
+            except Exception as e:
+                logger.warning(f"Could not read checkpoint to resume: {e}")
 
         logger.info(f"Starting Experiment: {total_steps} combinations.")
         logger.info(f"Target: {self.config.target_type} ({self.config.target_horizon}D)")
@@ -170,6 +206,11 @@ class ExperimentRunner:
 
                 for fset_id, fset_features in ticker_feature_sets.items():
                     for model_name in self.config.models:
+                        # Check if this combination has already been processed
+                        if (ticker, fset_id, model_name) in completed_jobs:
+                            pbar.update(1)
+                            continue
+
                         try:
                             self._run_single_experiment(
                                 ticker=ticker,
@@ -180,7 +221,6 @@ class ExperimentRunner:
                         except Exception as e:
                             logger.error(f"Failed {ticker}|{fset_id}|{model_name}: {e}")
                         finally:
-                            # CRITICAL FIX: Force garbage collection to prevent OOM on large grids
                             gc.collect() 
                             pbar.update(1)
 
@@ -276,12 +316,35 @@ class ExperimentRunner:
                 "Fold": fold,
                 **fold_metrics
             }
-            self.results.append(result_row)
+            # Write results incrementally to protection against data loss
+            self._save_checkpoint(result_row)
+
+    def _save_checkpoint(self, result_row: Dict[str, Any]) -> None:
+        """Appends a single result row to the CSV checkpoint file."""
+        file_exists = os.path.isfile(self.checkpoint_path)
+        try:
+            with open(self.checkpoint_path, 'a', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=result_row.keys())
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(result_row)
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception:
+            # Don't crash experiment for logging failure
+            pass
 
     def get_results_df(self) -> pd.DataFrame:
         """Convert results list to DataFrame.
-
-        Returns:
-            pd.DataFrame: Aggregated results.
+        
+        Updated to read from disk checkpoint to avoid holding large objects in memory.
         """
-        return pd.DataFrame(self.results)
+        if os.path.exists(self.checkpoint_path):
+            try:
+                return pd.read_csv(self.checkpoint_path, on_bad_lines='skip')
+            except TypeError:
+                return pd.read_csv(self.checkpoint_path, error_bad_lines=False)
+        
+        # Return empty dataframe with expected columns to prevent KeyErrors downstream
+        expected_cols = ["Ticker", "FeatureSet", "Model", "TargetType", "Diff", "Fold"]
+        return pd.DataFrame(columns=expected_cols)

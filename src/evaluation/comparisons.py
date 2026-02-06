@@ -17,6 +17,10 @@ BASELINES = {"NaiveBaseline", "MarketBenchmark", "RandomBaseline", "CAPMBaseline
 
 
 def get_top_results(metrics: Dict[str, bool], df: pd.DataFrame):
+    if df.empty:
+        print("No results to display (DataFrame is empty).")
+        return
+
     best_dfs = {}
     metrics_names = list(metrics.keys())
     agg = df.groupby(["Model", "FeatureSet", "Ticker"])[metrics_names].agg(["mean", "std"])
@@ -45,7 +49,7 @@ def get_top_results(metrics: Dict[str, bool], df: pd.DataFrame):
         df_metric.columns = [col.rstrip("_") for col in df_metric.columns]
 
         df_metric = df_metric.round(4)
-        print(df_metric.to_string(index=False))
+        print(df_metric.head(50).to_string(index=False))
 
 
 def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg_fn: str = "mean",  # or "median"
@@ -156,10 +160,26 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
         fontsize=12
     )
 
+    # Display inline without persisting to disk
     plt.show()
+    plt.close()  # Free memory immediately
 
 
 def plot_metrics_by_featureset(metrics: List[str], df: pd.DataFrame):
-    for metric in metrics:
-        filtered_cls = df[~df["Model"].isin(BASELINES)].copy()
-        plot_metric_by_featureset_scatter(filtered_cls, metric)
+    if df.empty:
+        print("No results to plot.")
+        return
+
+    try:
+        plt.close('all')
+        for metric in metrics:
+            filtered_cls = df[~df["Model"].isin(BASELINES)].copy()
+            if filtered_cls.empty:
+                continue
+            plot_metric_by_featureset_scatter(filtered_cls, metric)
+            # Clear memory after each plot
+            plt.close()
+    except Exception as e:
+        print(f"Plotting skipped due to error: {e}")
+        # Ensure we don't leave lingering plots
+        plt.close('all')
