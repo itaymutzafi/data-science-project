@@ -40,6 +40,9 @@ SENTIMENT_FEATURES = [
     f"sentiment_volatility_{SENTIMENT_MA_WINDOW}d_lag1",
 ]
 PROPHET_FEATURES = ['prophet_prediction_binary', 'prophet_prediction_continuous']
+RSI_FEATURE = ["RSI"]
+MA_DIST_FEATURES = [f"Dist_MA{win}" for win in FEATURE_WINDOWS]
+INTERACTION_FEATURES = ['Vol_x_Return', 'MACD_x_RSI', 'Trend_x_RSI']
 
 BLOCKS = {
     "Basic": BASIC_FEATURES,
@@ -55,6 +58,9 @@ BLOCKS = {
     "Report": REPORT_FEATURE,
     "Sentiment": SENTIMENT_FEATURES,
     "Prophet": PROPHET_FEATURES,
+    "RSI": RSI_FEATURE,
+    "Trend": MA_DIST_FEATURES,
+    "Interaction": INTERACTION_FEATURES,
     # "Peer" is added per ticker
 }
 

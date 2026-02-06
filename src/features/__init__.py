@@ -4,10 +4,10 @@ from .sentiment_analysis import display_demo_sentiment, generate_daily_sentiment
 from .day_month import add_day_month_features, preprocess_day_feature, preprocess_month_feature
 from .log_return import add_return_features, return_day_boxplot, test_return_seasonality
 from .volatility import add_volatility_features, volatility_comparison_plot
-from .moving_average import add_ma_features, add_macd_feature, ma_plot, macd_plot
+from .moving_average import add_ma_features, add_macd_feature, ma_plot, macd_plot, add_ma_distance_features
 from .reports import reports
 from .plots import avg_attr_by_time_plot, date_groupby_line_plot, articles_over_time_by_dataset_plot, article_volume_per_company_plot, \
-    pie_plot, table_visualize, plot_interaction_correlations, plot_rsi_grid, plot_ma_distance_grid, plot_feature_target_correlation
+    pie_plot, table_visualize, plot_interaction_correlations, plot_rsi_grid, plot_ma_distance_grid, plot_feature_target_correlation, plot_correlation_heatmap
 from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, add_macro_features
 from .sets import generate_diverse_combinations, print_feature_sets, build_feature_to_block_map
 from .targets import experiment_create_target_variable
@@ -40,6 +40,7 @@ __all__ = [
     "add_macd_feature",
     "ma_plot",
     "macd_plot",
+    "add_ma_distance_features",
     "reports",
     "avg_attr_by_time_plot",
     "date_groupby_line_plot",
@@ -51,6 +52,7 @@ __all__ = [
     "plot_rsi_grid",
     "plot_ma_distance_grid",
     "plot_feature_target_correlation",
+    "plot_correlation_heatmap",
     "add_peer_stock_features",
     "peer_stock_correlation",
     "add_auxiliary_features",

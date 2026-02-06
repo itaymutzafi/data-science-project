@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+import gc
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
@@ -179,6 +180,8 @@ class ExperimentRunner:
                         except Exception as e:
                             logger.error(f"Failed {ticker}|{fset_id}|{model_name}: {e}")
                         finally:
+                            # CRITICAL FIX: Force garbage collection to prevent OOM on large grids
+                            gc.collect() 
                             pbar.update(1)
 
 
