@@ -13,6 +13,7 @@ from pathlib import Path
 import feedparser
 import os
 import sys
+import requests
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.config import START_DATE, END_DATE, TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH
@@ -177,16 +178,25 @@ def get_google_news_titles(query: str, days: int) -> pd.DataFrame:
     # "when:Xd" limits to last X days
     q = query.replace(" ", "+") + f"+when:{days}d"
     url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-
-    feed = feedparser.parse(url)
+    try:
+        # requests uses certifi CA bundle and is more reliable in virtual envs.
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+        feed = feedparser.parse(response.content)
+    except Exception:
+        # Keep API stable for notebook usage: return an empty, typed DataFrame.
+        df = pd.DataFrame(columns=["published", "date", "title", "link", "source"])
+        df["date"] = pd.to_datetime(df["date"])
+        return df
 
     rows = []
     for entry in feed.entries:
+        published = getattr(entry, "published", "")
         rows.append({
-            "published": entry.published,
-            "date": pd.to_datetime(entry.published[:16]),
-            "title": entry.title,
-            "link": entry.link,
+            "published": published,
+            "date": pd.to_datetime(published, errors="coerce"),
+            "title": getattr(entry, "title", ""),
+            "link": getattr(entry, "link", ""),
             "source": entry.source.title if "source" in entry else "unknown"
         })
 
@@ -195,4 +205,5 @@ def get_google_news_titles(query: str, days: int) -> pd.DataFrame:
         df["date"] = pd.to_datetime(df["date"])
         return df
 
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    return df.dropna(subset=["date"]).reset_index(drop=True)

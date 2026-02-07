@@ -11,6 +11,7 @@ It provides a pipeline to:
 
 import logging
 import os
+import textwrap
 from typing import List, Optional, Tuple, Any
 import numpy as np
 import pandas as pd
@@ -22,15 +23,18 @@ import seaborn as sns
 
 from src.config import TICKER_TO_COMPANY_MAP, SENTIMENT_CACHE, SAMPLES_PER_DAY, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, COMPANY_COLORS
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
-from src.utils import set_style
+from src.utils import set_style, apply_academic_style
+from transformers.utils import logging as hf_logging
 
 # Sentiment Analysis Configuration
 # Note: Feature options are now handled in src.features.sets
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
+hf_logging.set_verbosity_error()
 
 _sentiment_pipeline = None  # Lazy-loaded FinBERT pipeline
 
@@ -54,8 +58,6 @@ def _get_pipeline(model_name: str, device: Any):
     if _sentiment_pipeline is not None:
         return _sentiment_pipeline
 
-    print("Checking for FinBERT model...")
-    
     # Map device index for pipeline
     device_index = -1
     if isinstance(device, torch.device):
@@ -65,14 +67,12 @@ def _get_pipeline(model_name: str, device: Any):
             device_index = "mps"
             
     try:
-        print(f"   -> Loading model ({model_name}) on {device}...")
         _sentiment_pipeline = pipeline(
             "sentiment-analysis", 
             model=model_name, 
             tokenizer=model_name, 
             device=device_index
         )
-        print("Model loaded.")
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         raise e
@@ -184,7 +184,13 @@ class SentimentAnalyzer:
         self.model_name = model_name
         self.device = _resolve_device(device)
 
-    def analyze_headlines(self, df: pd.DataFrame, text_col: str = 'final_text', batch_size: int = 32) -> pd.DataFrame:
+    def analyze_headlines(
+        self,
+        df: pd.DataFrame,
+        text_col: str = 'final_text',
+        batch_size: int = 32,
+        show_progress: bool = False
+    ) -> pd.DataFrame:
         """
         Runs the sentiment model on the text column.
         Adds 'sentiment_score' (-1 to 1) and 'sentiment_raw_label'.
@@ -196,8 +202,11 @@ class SentimentAnalyzer:
         texts = df[text_col].tolist()
         results = []
         
-        logger.info(f"Scoring {len(texts)} headlines...")
-        for i in tqdm(range(0, len(texts), batch_size), desc="Sentiment Inference"):
+        for i in tqdm(
+            range(0, len(texts), batch_size),
+            desc="Sentiment Inference",
+            disable=not show_progress
+        ):
             batch = texts[i : i + batch_size]
             # top_k=None returns all scores for calculating continuous value
             batch_results = pipeline(batch, padding=True, truncation=True, top_k=None)
@@ -290,26 +299,52 @@ def calculate_market_features(df: pd.DataFrame) -> pd.DataFrame:
 def get_sentiment_coverage_stats(df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculates coverage statistics for sentiment data.
-    Returns a DataFrame with columns: [company, first_day, last_day, total_days, days_with_news, coverage_pct]
+    Returns a DataFrame with columns:
+    [company, first_day, last_day, total_days, days_with_news, no_news_days,
+     tagged_news_coverage_pct, no_news_pct]
+
+    Notes:
+    - "coverage" here means days with at least one tagged news item (news_count > 0).
+    - This is not a strict mention-rate metric.
     """
-    stats = []
     if df.empty:
         return pd.DataFrame()
-        
+
+    required_cols = {"company", "date", "news_count"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        raise ValueError(f"Missing required columns for coverage stats: {sorted(missing_cols)}")
+
+    stats = []
     for company, group in df.groupby('company'):
         total_days = len(group)
         news_days = group[group['news_count'] > 0].shape[0]
-        
+        no_news_days = total_days - news_days
+        tagged_news_coverage_pct = (news_days / total_days * 100) if total_days > 0 else 0.0
+        no_news_pct = (no_news_days / total_days * 100) if total_days > 0 else 0.0
+
         stats.append({
             'company': company,
             'first_day': group['date'].min(),
             'last_day': group['date'].max(),
             'total_days': total_days,
             'days_with_news': news_days,
-            'coverage_pct': (news_days / total_days * 100) if total_days > 0 else 0
+            'no_news_days': no_news_days,
+            'tagged_news_coverage_pct': tagged_news_coverage_pct,
+            'no_news_pct': no_news_pct,
         })
-    
-    return pd.DataFrame(stats).sort_values('company')
+
+    ordered_cols = [
+        "company",
+        "first_day",
+        "last_day",
+        "total_days",
+        "days_with_news",
+        "no_news_days",
+        "tagged_news_coverage_pct",
+        "no_news_pct",
+    ]
+    return pd.DataFrame(stats).sort_values('company')[ordered_cols]
 
 
 def process_sentiment_timeseries(df: pd.DataFrame) -> pd.DataFrame:
@@ -443,13 +478,51 @@ def get_demo_day_data(news_path: str, company: str, date: str, strict_match: boo
 
 # --- Reporting Helpers ---
 
-def display_demo_sentiment(news_path: str, company: str, date: str, strict_match: bool = False):
-    """Wrapper to display demo plots."""
+def display_demo_sentiment(
+    news_path: str,
+    company: str,
+    date: str,
+    strict_match: bool = False,
+    verbose: bool = False
+):
+    """Display a concise sentiment summary and a publication-ready demo chart."""
     scored, score = get_demo_day_data(news_path, company, date, strict_match=strict_match)
     if not scored.empty:
+        n_items = len(scored)
+        mean_score = float(scored["sentiment_score"].mean())
+        median_score = float(scored["sentiment_score"].median())
+        std_score = float(scored["sentiment_score"].std(ddof=0))
+
+        if "sentiment_raw_label" in scored.columns:
+            label_mix = scored["sentiment_raw_label"].value_counts(normalize=True)
+            pos_pct = 100 * label_mix.get("positive", 0.0)
+            neu_pct = 100 * label_mix.get("neutral", 0.0)
+            neg_pct = 100 * label_mix.get("negative", 0.0)
+        else:
+            pos_pct = neu_pct = neg_pct = 0.0
+
+        if verbose:
+            print(f"Sentiment Demo | {company} | {date}")
+            print(
+                f"Articles analyzed: {n_items} "
+                f"(strict_match={strict_match})"
+            )
+            print(
+                f"Daily score (mean): {mean_score:+.3f} | "
+                f"Median: {median_score:+.3f} | Std: {std_score:.3f}"
+            )
+            print(
+                f"Label mix: Positive {pos_pct:.1f}% | "
+                f"Neutral {neu_pct:.1f}% | Negative {neg_pct:.1f}%"
+            )
+
         plot_day_sentiment_breakdown(scored, date, company, score)
     else:
-        print("No Data.")
+        if verbose:
+            print(
+                f"No valid news rows found for company={company}, date={date}, "
+                f"strict_match={strict_match}."
+            )
 
 def run_sentiment_pipeline_for_report(stock_df: pd.DataFrame, config_obj: Any) -> pd.DataFrame:
     """Wrapper to run the full pipeline in the report context."""
@@ -795,43 +868,72 @@ def plot_sentiment_trends(daily_sentiment_df: pd.DataFrame) -> None:
 
 
 def plot_day_sentiment_breakdown(daily_news_df: pd.DataFrame, date: str, company: str, daily_score: float) -> None:
-    """Show sentiment distribution and key headlines for a single day."""
+    """Show sentiment distribution and the most influential headlines for a single day."""
     set_style()
     if daily_news_df.empty:
         print(f"No news found for {company} on {date}")
         return
 
-    scores = daily_news_df["sentiment_score"].values
-    fig = plt.figure(figsize=(14, 7))
-    grid = plt.GridSpec(1, 2, width_ratios=[1.2, 1])
+    df = (
+        daily_news_df.copy()
+        .drop_duplicates(subset=["headline"])
+        .sort_values(by="sentiment_score", ascending=False)
+    )
 
-    ax1 = fig.add_subplot(grid[0])
-    sns.histplot(scores, kde=True, ax=ax1, color="skyblue", bins=10)
-    ax1.axvline(daily_score, color="red", linestyle="--", linewidth=2, label=f"Daily Mean: {daily_score:.2f}")
-    ax1.set_title(f"Sentiment Distribution: {company} on {date}", fontweight="bold")
-    ax1.set_xlabel("Sentiment Score (-1 to 1)")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    scores = df["sentiment_score"].astype(float)
+    company_color = COMPANY_COLORS.get(company, "#1F7A8C")
+    pos_color = "#0A9396"
+    neg_color = "#9B2226"
 
-    ax2 = fig.add_subplot(grid[1])
-    ax2.axis("off")
-    daily_news_df = daily_news_df.drop_duplicates(subset=["headline"]).sort_values(by="sentiment_score", ascending=False)
-    top_pos = daily_news_df.head(3)
-    top_neg = daily_news_df.tail(3)
+    top_k = min(6, len(df))
+    fig_height = max(6.2, 3.8 + 0.65 * top_k)
+    fig = plt.figure(figsize=(14.5, fig_height), constrained_layout=True)
+    grid = plt.GridSpec(1, 2, figure=fig, width_ratios=[1.1, 1.0], wspace=0.34)
 
-    import textwrap
+    # Left panel: score distribution
+    ax1 = fig.add_subplot(grid[0, 0])
+    sns.histplot(
+        scores,
+        bins=12,
+        kde=True,
+        ax=ax1,
+        color=company_color,
+        alpha=0.55,
+        edgecolor="white",
+        linewidth=0.7,
+    )
+    ax1.axvline(daily_score, color="#1B263B", linestyle="--", linewidth=1.9, label=f"Mean = {daily_score:+.2f}")
+    ax1.axvline(scores.median(), color="#6c757d", linestyle=":", linewidth=1.6, label=f"Median = {scores.median():+.2f}")
+    ax1.set_xlim(-1.0, 1.0)
+    ax1.set_xlabel("FinBERT Sentiment Score")
+    ax1.set_ylabel("Headline Count")
+    ax1.legend(frameon=False, loc="upper left")
+    apply_academic_style(ax1, f"Sentiment Distribution | {company} | {date}")
 
-    text_content = f"### Key Headlines ({len(daily_news_df)} Total)\n\n"
-    text_content += "**Most Positive:**\n"
-    for _, row in top_pos.iterrows():
-        short_headline = textwrap.shorten(row["headline"], width=60, placeholder="...")
-        text_content += f"(+{row['sentiment_score']:.2f}) {short_headline}\n"
+    # Right panel: strongest headlines by absolute score
+    ax2 = fig.add_subplot(grid[0, 1])
+    strongest = (
+        df.assign(abs_score=df["sentiment_score"].abs())
+        .nlargest(top_k, "abs_score")
+        .sort_values("sentiment_score")
+    )
+    labels = [textwrap.shorten(h, width=52, placeholder="...") for h in strongest["headline"]]
+    values = strongest["sentiment_score"].astype(float).tolist()
+    colors = [pos_color if v >= 0 else neg_color for v in values]
+    y = np.arange(len(strongest))
 
-    text_content += "\n**Most Negative:**\n"
-    for _, row in top_neg.iterrows():
-        short_headline = textwrap.shorten(row["headline"], width=60, placeholder="...")
-        text_content += f"(-{abs(row['sentiment_score']):.2f}) {short_headline}\n"
+    ax2.barh(y, values, color=colors, alpha=0.9, edgecolor="white", linewidth=0.6)
+    ax2.set_yticks(y)
+    ax2.set_yticklabels(labels, fontsize=9)
+    ax2.axvline(0.0, color="#1B263B", linestyle="--", linewidth=1.2, alpha=0.85)
+    ax2.set_xlim(-1.0, 1.0)
+    ax2.set_xlabel("Headline-Level Score")
+    apply_academic_style(ax2, "Most Influential Headlines (by |score|)")
 
-    ax2.text(0.05, 0.95, text_content, fontsize=10, va="top", ha="left", family="monospace")
-    plt.tight_layout()
+    for yi, v in zip(y, values):
+        x = v + (0.03 if v >= 0 else -0.03)
+        ha = "left" if v >= 0 else "right"
+        ax2.text(x, yi, f"{v:+.2f}", va="center", ha=ha, fontsize=8.8, color="#1f1f1f")
+
+    fig.suptitle("FinBERT Daily Sentiment Breakdown", fontsize=16, fontweight="bold")
     plt.show()
