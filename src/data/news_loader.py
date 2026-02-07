@@ -8,7 +8,8 @@ from datetime import datetime, date
 from huggingface_hub import login
 import json
 import pandas as pd
-from typing import Any, Optional
+from typing import Any, Optional, Union
+from pathlib import Path
 import feedparser
 import os
 import sys
@@ -158,11 +159,16 @@ if __name__ == "__main__":
     main()
 
 # Util
-def get_news_df_from_file(file_path: str) -> pd.DataFrame:
-    if file_path.endswith(".csv"):
-        df = pd.read_csv(file_path, dtype=str)
+def get_news_df_from_file(file_path: Union[str, Path]) -> pd.DataFrame:
+    """
+    Load news data from CSV or Parquet, accepting either str or Path input.
+    """
+    path_obj = Path(file_path)
+
+    if path_obj.suffix == ".csv":
+        df = pd.read_csv(path_obj, dtype=str)
     else:
-        df = pd.read_parquet(file_path)
+        df = pd.read_parquet(path_obj)
     df["date"] = pd.to_datetime(df["date"])
     return df
 
