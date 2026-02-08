@@ -5,8 +5,6 @@ combinations of time-series data (tickers), feature sets, and machine learning m
 """
 
 import logging
-import os
-import csv
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
@@ -19,6 +17,7 @@ from tqdm import tqdm
 
 from src.evaluation import metrics
 from src.features import experiment_create_target_variable
+from src.utils.feature_names import canonicalize_feature_columns
 from src.models import registry
 from src.config import DEF_SPLITS
 
@@ -73,6 +72,8 @@ class ExperimentConfig:
     start_date: str
     end_date: str
     n_splits: int = DEF_SPLITS
+    show_progress: bool = True
+    log_missing_features: bool = False
 
 
 class ExperimentRunner:
@@ -88,14 +89,6 @@ class ExperimentRunner:
         self.raw_dfs = df_dict
         self.config = config
         self.results: List[Dict[str, Any]] = []
-        
-        # Checkpoint file setup
-        # Use a target-specific checkpoint to avoid mixing classification and regression runs
-        suffix = f"{self.config.target_type}_{self.config.target_horizon}d"
-        self.checkpoint_path = f"data/processed/experiment_checkpoint_{suffix}.csv"
-        
-        # Ensure data directory exists
-        os.makedirs(os.path.dirname(self.checkpoint_path), exist_ok=True)
 
 
     def _prepare_data(self, ticker: str, feature_set: List[str]) -> Tuple[pd.DataFrame, str, List[str]]:
@@ -114,7 +107,7 @@ class ExperimentRunner:
         Raises:
             ValueError: If no features are available or data is empty.
         """
-        df = self.raw_dfs[ticker].copy()
+        df = canonicalize_feature_columns(self.raw_dfs[ticker].copy())
 
         # 1. Generate Target
         df, target_col = experiment_create_target_variable(
@@ -127,7 +120,11 @@ class ExperimentRunner:
         available_feats = [f for f in feature_set if f in df.columns]
         missing_feats = set(feature_set) - set(available_feats)
         if missing_feats:
-            logger.warning(f"Ticker {ticker}: Missing features {missing_feats}")
+            message = f"Ticker {ticker}: Missing features {missing_feats}"
+            if self.config.log_missing_features:
+                logger.warning(message)
+            else:
+                logger.debug(message)
 
         if not available_feats:
             raise ValueError(f"No features available for {ticker} in set {feature_set}")
@@ -171,46 +168,17 @@ class ExperimentRunner:
         total_steps = sum(
             len(fsets) for fsets in self.config.feature_sets.values()
         ) * len(self.config.models)
-        
-        # Load completed jobs to skip (resume support)
-        completed_jobs = set()
-        if os.path.exists(self.checkpoint_path):
-            try:
-                # Read only needed columns to check existence, skipping corrupted lines
-                try:
-                    df_existing = pd.read_csv(
-                        self.checkpoint_path,
-                        usecols=["Ticker", "FeatureSet", "Model"],
-                        on_bad_lines="skip",
-                    )
-                except TypeError:
-                    # Fallback for older pandas versions
-                    df_existing = pd.read_csv(
-                        self.checkpoint_path,
-                        usecols=["Ticker", "FeatureSet", "Model"],
-                        error_bad_lines=False,
-                    )
-                # Signature uses FeatureSet id (not feature list) to match stored rows
-                for _, row in df_existing.iterrows():
-                    completed_jobs.add((row["Ticker"], int(row["FeatureSet"]), row["Model"]))
-                logger.info(f"Resuming experiment. Found {len(completed_jobs)} completed entries (folds).")
-            except Exception as e:
-                logger.warning(f"Could not read checkpoint to resume: {e}")
 
         logger.info(f"Starting Experiment: {total_steps} combinations.")
         logger.info(f"Target: {self.config.target_type} ({self.config.target_horizon}D)")
 
-        with tqdm(total=total_steps, desc="Running Grid") as pbar:
+        pbar = tqdm(total=total_steps, desc="Running Grid") if self.config.show_progress else None
+        try:
             for ticker in self.config.tickers:
                 ticker_feature_sets = self.config.feature_sets[ticker]  # Dict[str, List[str]]
 
                 for fset_id, fset_features in ticker_feature_sets.items():
                     for model_name in self.config.models:
-                        # Check if this combination has already been processed
-                        if (ticker, fset_id, model_name) in completed_jobs:
-                            pbar.update(1)
-                            continue
-
                         try:
                             self._run_single_experiment(
                                 ticker=ticker,
@@ -221,11 +189,21 @@ class ExperimentRunner:
                         except Exception as e:
                             logger.error(f"Failed {ticker}|{fset_id}|{model_name}: {e}")
                         finally:
-                            gc.collect() 
-                            pbar.update(1)
+                            gc.collect()
+                            if pbar is not None:
+                                pbar.update(1)
+        finally:
+            if pbar is not None:
+                pbar.close()
 
 
-    def _run_single_experiment(self, ticker: str, fset_id: int, fset_features: List[str], model_name: str) -> None:
+    def _run_single_experiment(
+        self,
+        ticker: str,
+        fset_id: int,
+        fset_features: List[str],
+        model_name: str,
+    ) -> None:
         """Runs a single combination of Ticker, FeatureSet, and Model.
 
         Args:
@@ -247,7 +225,14 @@ class ExperimentRunner:
         model = registry.get_model(model_name, input_size=input_size)
 
         # 4. Execution (Walk-Forward Validation)
-        self._run_walk_forward_validation(data, target_col, model, model_name, ticker, fset_id)
+        self._run_walk_forward_validation(
+            data=data,
+            target_col=target_col,
+            model=model,
+            model_name=model_name,
+            ticker=ticker,
+            fset_id=fset_id,
+        )
 
     def _run_walk_forward_validation(
         self,
@@ -256,7 +241,7 @@ class ExperimentRunner:
         model: Any,
         model_name: str,
         ticker: str,
-        fset_id: int
+        fset_id: int,
     ) -> None:
         """Performs Time-Series Walk-Forward validation.
 
@@ -304,7 +289,12 @@ class ExperimentRunner:
                     preds_series = (preds_series > 0.5).astype(int)
                 fold_metrics = metrics.evaluate_classification(y_val, preds_series)
             else:
-                fold_metrics = metrics.evaluate_regression(y_val, preds_series, model_name)
+                fold_metrics = metrics.evaluate_regression(
+                    y_val,
+                    preds_series,
+                    model_name,
+                    n_features=X.shape[1],
+                )
 
             # Store result
             result_row = {
@@ -316,34 +306,14 @@ class ExperimentRunner:
                 "Fold": fold,
                 **fold_metrics
             }
-            # Write results incrementally to protection against data loss
-            self._save_checkpoint(result_row)
-
-    def _save_checkpoint(self, result_row: Dict[str, Any]) -> None:
-        """Appends a single result row to the CSV checkpoint file."""
-        file_exists = os.path.isfile(self.checkpoint_path)
-        try:
-            with open(self.checkpoint_path, 'a', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=result_row.keys())
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow(result_row)
-                f.flush()
-                os.fsync(f.fileno())
-        except Exception:
-            # Don't crash experiment for logging failure
-            pass
+            # Keep all fold-level rows in memory for deterministic downstream aggregation.
+            self.results.append(result_row)
 
     def get_results_df(self) -> pd.DataFrame:
         """Convert results list to DataFrame.
-        
-        Updated to read from disk checkpoint to avoid holding large objects in memory.
         """
-        if os.path.exists(self.checkpoint_path):
-            try:
-                return pd.read_csv(self.checkpoint_path, on_bad_lines='skip')
-            except TypeError:
-                return pd.read_csv(self.checkpoint_path, error_bad_lines=False)
+        if self.results:
+            return pd.DataFrame(self.results)
         
         # Return empty dataframe with expected columns to prevent KeyErrors downstream
         expected_cols = ["Ticker", "FeatureSet", "Model", "TargetType", "Diff", "Fold"]

@@ -10,12 +10,32 @@ from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.svm import SVR
 from . import baselines
 from . import advanced
+from src.config import SEED
 
 try:
     from xgboost import XGBRegressor, XGBClassifier
     _XGB_AVAILABLE = True
 except ImportError:
     _XGB_AVAILABLE = False
+
+
+LOGISTIC_REGRESSION_DEFAULTS: Dict[str, Any] = {
+    "solver": "lbfgs",
+    "max_iter": 2000,
+    "random_state": SEED,
+}
+
+RANDOM_FOREST_CLASSIFIER_DEFAULTS: Dict[str, Any] = {
+    "n_estimators": 100,
+    "random_state": SEED,
+    "n_jobs": -1,
+}
+
+XGB_CLASSIFIER_DEFAULTS: Dict[str, Any] = {
+    "eval_metric": "logloss",
+    "random_state": SEED,
+    "n_jobs": -1,
+}
 
 
 def get_model(name: str, input_size: Optional[int] = None, **kwargs) -> Any:
@@ -61,11 +81,13 @@ def get_model(name: str, input_size: Optional[int] = None, **kwargs) -> Any:
     elif name == "RandomForest":
         return RandomForestRegressor(**kwargs)
     elif name == "RandomForestClassifier":
-        # Default n_estimators=100 if not specified
-        kwargs.setdefault('n_estimators', 100)
-        return RandomForestClassifier(**kwargs)
+        defaults = RANDOM_FOREST_CLASSIFIER_DEFAULTS.copy()
+        defaults.update(kwargs)
+        return RandomForestClassifier(**defaults)
     elif name == "LogisticRegression":
-        return LogisticRegression(**kwargs)
+        defaults = LOGISTIC_REGRESSION_DEFAULTS.copy()
+        defaults.update(kwargs)
+        return LogisticRegression(**defaults)
 
     # --- XGBoost ---
     elif name == "XGBRegressor":
@@ -75,7 +97,9 @@ def get_model(name: str, input_size: Optional[int] = None, **kwargs) -> Any:
     elif name == "XGBClassifier":
         if not _XGB_AVAILABLE:
             raise ImportError("XGBoost not installed.")
-        return XGBClassifier(**kwargs)
+        defaults = XGB_CLASSIFIER_DEFAULTS.copy()
+        defaults.update(kwargs)
+        return XGBClassifier(**defaults)
     elif name == "XGB_Conservative":
         if not _XGB_AVAILABLE:
             raise ImportError("XGBoost not installed.")

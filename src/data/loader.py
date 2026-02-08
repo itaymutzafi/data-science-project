@@ -11,6 +11,7 @@ import yfinance as yf
 from yfinance import Ticker
 
 from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, TICKERS
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
@@ -114,6 +115,7 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None, verbose: 
             print(f"Loading auxiliary data from cache: {cache_path}")
         try:
             data = pd.read_parquet(cache_path)
+            data = canonicalize_feature_columns(data)
             # Ensure index is timezone-naive
             if data.index.tz is not None:
                 data.index = data.index.tz_localize(None)
@@ -137,6 +139,7 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None, verbose: 
             
         # Rename columns using the mapping
         data = data.rename(columns=AUX_TICKER_MAP)
+        data = canonicalize_feature_columns(data)
         
         # Handle missing values (forward fill)
         data = data.ffill()

@@ -13,6 +13,24 @@ CLS_METRICS = {"Accuracy": False, "Precision": False, "Recall": False}
 REG_METRICS = {"RMSE": True, "R2": False, "Directional Accuracy": False}
 
 
+def _safe_information_coefficient(y_true: pd.Series, y_pred: pd.Series) -> float:
+    """Compute Pearson IC safely, avoiding runtime warnings on degenerate folds."""
+    aligned = pd.concat([y_true, y_pred], axis=1).dropna()
+    if aligned.empty:
+        return 0.0
+
+    a = aligned.iloc[:, 0]
+    b = aligned.iloc[:, 1]
+    if a.nunique() < 2 or b.nunique() < 2:
+        return 0.0
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ic = a.corr(b)
+    if pd.isna(ic) or np.isinf(ic):
+        return 0.0
+    return float(ic)
+
+
 def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
     """Compute (annualized) Sharpe ratio for a daily returns series.
     
@@ -91,7 +109,12 @@ def calculate_profit_factor(returns: pd.Series) -> float:
     return profits / losses
 
 
-def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=None) -> Dict[str, float]:
+def evaluate_regression(
+    y_true: pd.Series,
+    y_pred: pd.Series,
+    model_name: str = None,
+    n_features: int | None = None,
+) -> Dict[str, float]:
     """Compute regression & business metrics (MSE, R2, DA, Sharpe).
     
     Args:
@@ -108,6 +131,16 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=No
     mae = mean_absolute_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
     
+    if n_features is None:
+        adjusted_r2 = np.nan
+    else:
+        n_obs = len(y_true)
+        denom = n_obs - int(n_features) - 1
+        if denom <= 0:
+            adjusted_r2 = np.nan
+        else:
+            adjusted_r2 = 1 - ((1 - r2) * (n_obs - 1) / denom)
+
     # 2. Business Metrics
     # Directional Accuracy: % of times sign(y_pred) == sign(y_true)
     # We use sign(y) where 0 is considered positive or handled consistently
@@ -142,13 +175,14 @@ def evaluate_regression(y_true: pd.Series, y_pred: pd.Series, model_name: str=No
         profit_factor = calculate_profit_factor(strategy_returns)
         max_dd = calculate_max_drawdown(strategy_returns)
 
-        ic = y_true.corr(y_pred) # Information Coefficient (Pearson)
+        ic = _safe_information_coefficient(y_true, y_pred)
 
     return {
         "MSE": mse,
         "RMSE": rmse,
         "MAE": mae,
         "R2": r2,
+        "Adjusted R2": adjusted_r2,
         "Directional Accuracy": da,
         "Precision": precision,
         "Recall": recall,

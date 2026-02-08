@@ -8,7 +8,7 @@ from .plots import (
     plot_return_distributions,
     plot_correlation_heatmap,
 )
-from .comparisons import get_top_results, plot_metrics_by_featureset
+from .comparisons import collect_top_results, get_top_results, plot_metrics_by_featureset
 
 __all__ = [
     "check_stationarity",
@@ -22,6 +22,7 @@ __all__ = [
     "plot_target_alignment",
     "plot_return_distributions",
     "plot_correlation_heatmap",
+    "collect_top_results",
     "get_top_results",
     "plot_metrics_by_featureset"
 ]

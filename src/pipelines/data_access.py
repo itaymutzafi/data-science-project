@@ -55,6 +55,7 @@ def load_sentiment(
     *,
     force_compute: bool = False,
     cutoff_date: str = "2020-01-01",
+    sentiment_depth: int | str | None = None,
     copy: bool = True,
 ) -> pd.DataFrame:
     """Load sentiment features once and reuse them.
@@ -65,6 +66,9 @@ def load_sentiment(
         Re-run FinBERT scoring even if a cache file exists. Defaults to False.
     cutoff_date : str
         Optional cutoff filter passed to the sentiment pipeline.
+    sentiment_depth : int | str | None
+        Controls per-day/company headline sampling depth in sentiment scoring.
+        If ``None`` (default), pipeline fallback behavior is used.
     copy : bool
         If True (default), returns a copy.
 
@@ -79,6 +83,7 @@ def load_sentiment(
             news_path=RAW_NEWS_PATH,
             output_path=None,  # let pipeline use its default cache handling
             cutoff_date=cutoff_date,
+            sentiment_depth=sentiment_depth,
             force_compute=force_compute,
         )
         # Set index to datetime for consistent downstream joins

@@ -1,6 +1,7 @@
 """Advanced models implementation: LSTM (PyTorch), XGBoost, and Random Forest."""
 
 from typing import List, Optional, Tuple, Any, Dict
+import logging
 import numpy as np
 import pandas as pd
 import torch
@@ -18,6 +19,8 @@ except ImportError:
     _XGB_AVAILABLE = False
 
 from .base import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class LSTMModel(nn.Module):
@@ -131,7 +134,7 @@ class LSTMRegressor(BaseModel):
         # Create sequences
         # NOTE: This reduces dataset size by seq_length
         if len(X_vals) <= self.seq_length:
-            print("Warning: Not enough data for sequence length.")
+            logger.debug("Skipping LSTM fit: not enough rows for sequence length.")
             self._train_tail = X_vals
             self._train_tail_index = list(X.index)
             return self

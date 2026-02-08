@@ -7,6 +7,7 @@ import yfinance as yf
 from pathlib import Path
 
 from src.config import *
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 def plot_sec_fiilings_dates(reports_by_company):
@@ -62,8 +63,9 @@ def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
         direction='nearest',
     )
     nearest.index = df.index
-    df['Days To Nearest Report'] = abs((nearest['filing_date'] - nearest.index)).dt.days
-    df['Days To Nearest Report'] = df['Days To Nearest Report'].fillna(np.inf)
+    df['Days_To_Nearest_Report'] = abs((nearest['filing_date'] - nearest.index)).dt.days
+    df['Days_To_Nearest_Report'] = df['Days_To_Nearest_Report'].fillna(np.inf)
+    df = canonicalize_feature_columns(df)
 
     return df
 
@@ -138,8 +140,8 @@ def reports(dfs: Dict[str, pd.DataFrame], force_refresh: bool = False) -> None:
         reports_list = reports_by_company[company]
         reports_df = pd.DataFrame(reports_list)
         if "date" not in reports_df.columns or reports_df.empty:
-            print(f"No filing dates available for {company}. Filling 'Days To Nearest Report' with NaNs.")
-            df['Days To Nearest Report'] = np.nan
+            print(f"No filing dates available for {company}. Filling 'Days_To_Nearest_Report' with NaNs.")
+            df['Days_To_Nearest_Report'] = np.nan
             continue
         report_dates = reports_df["date"]
         dfs[company] = create_days_to_report(df, report_dates)

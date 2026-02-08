@@ -5,6 +5,7 @@ from typing import List, Dict
 import seaborn as sns
 
 from src.config import TICKERS, TICKER_TO_COMPANY_MAP, COMPANY_COLORS, AUX_COLORS, FEATURE_WINDOWS
+from src.utils.feature_names import canonicalize_feature_name, canonicalize_feature_columns
 
 
 def add_macro_features(
@@ -12,10 +13,10 @@ def add_macro_features(
     aux_data: pd.DataFrame,
     *,
     verbose: bool = False,
-    plot: bool = True,
+    plot: bool = False,
 ) -> None:
-    # Wrapper for add_auxiliary_features that also adds derived features
-    add_auxiliary_features(dfs, aux_data, verbose=verbose, plot=plot)
+    # Default is non-blocking for notebook/pipeline runs; plotting remains opt-in.
+    add_auxiliary_features(dfs, canonicalize_feature_columns(aux_data), verbose=verbose, plot=plot)
 
 
 def add_peer_stock_features(dfs: Dict[str, pd.DataFrame], columns_to_merge: List[str]) -> None:
@@ -48,7 +49,10 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
             continue
         
         feature_df_selected = feature_df[available_cols].copy()
-        feature_df_selected.columns = [f"{feature_name} - {col}" for col in feature_df_selected.columns]
+        feature_df_selected.columns = [
+            canonicalize_feature_name(f"{feature_name} - {col}")
+            for col in feature_df_selected.columns
+        ]
 
         new_cols = [c for c in feature_df_selected.columns if c not in res_df.columns]
         if not new_cols:
@@ -64,7 +68,7 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
 
 def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: str) -> None:
     other_tickers = [t for t in TICKERS if t != ticker]
-    others_cols = [f"{t} - {column}" for t in other_tickers]
+    others_cols = [canonicalize_feature_name(f"{t} - {column}") for t in other_tickers]
     cols = [column] + others_cols
     corr_df = dfs[ticker][cols].corr()
 
@@ -110,6 +114,7 @@ def add_auxiliary_features(
             dfs[name] = df.join(aux_data[new_cols], how='left')
             # Forward fill to handle missing daily data if aux matches higher timeframe or gaps
             dfs[name][new_cols] = dfs[name][new_cols].ffill()
+            dfs[name] = canonicalize_feature_columns(dfs[name])
         
         # --- Derived Macro Features (VIX Regimes) ---
         df = dfs[name]

@@ -45,7 +45,7 @@ AUX_TICKER_MAP = {
     'QQQ': 'Nasdaq_100',
     '^VIX': 'VIX_Index',
     '^TNX': 'Treasury_10Y',
-    'NVDA': 'NVIDIA_Segment_Leader'
+    'NVDA': 'NVDA_Leader',
 }
 SAMPLES_PER_DAY = 1
 
@@ -78,5 +78,5 @@ AUX_COLORS = {
     'Nasdaq_100': '#663399',          # RebeccaPurple (Rich, distinct index color)
     'VIX_Index': '#E0115F',           # Ruby (Distinct from Microsoft Red, signaling alert)
     'Treasury_10Y': '#708090',        # SlateGray (Neutral, bond-like)
-    'NVIDIA_Segment_Leader': '#20B2AA' # LightSeaGreen (Distinct from Apple, tech-like)
+    'NVDA_Leader': '#20B2AA'          # LightSeaGreen (Distinct from Apple, tech-like)
 }

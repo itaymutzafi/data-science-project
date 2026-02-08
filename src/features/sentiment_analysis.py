@@ -39,6 +39,52 @@ hf_logging.set_verbosity_error()
 _sentiment_pipeline = None  # Lazy-loaded FinBERT pipeline
 
 
+def _resolve_sentiment_sample_size(
+    *,
+    sentiment_depth: int | str | None,
+    fallback_n_sample_per_day: int | None,
+) -> int | None:
+    """Resolve headline sampling depth into per-day sample size.
+
+    Conventions:
+    - Integer N >= 0: keep at most N headlines per (date, company).
+      N=0 means no cap (use all headlines).
+    - Presets:
+      - "low"/"quick" -> 1
+      - "medium"/"balanced" -> 3
+      - "high" -> 5
+      - "deep"/"full"/"all" -> 0 (no cap)
+    """
+    if sentiment_depth is None:
+        return fallback_n_sample_per_day
+
+    if isinstance(sentiment_depth, int):
+        if sentiment_depth < 0:
+            raise ValueError("sentiment_depth integer must be >= 0.")
+        return sentiment_depth
+
+    if isinstance(sentiment_depth, str):
+        key = sentiment_depth.strip().lower()
+        presets = {
+            "low": 1,
+            "quick": 1,
+            "medium": 3,
+            "balanced": 3,
+            "high": 5,
+            "deep": 0,
+            "full": 0,
+            "all": 0,
+        }
+        if key not in presets:
+            raise ValueError(
+                "Invalid sentiment_depth preset. Use one of: "
+                f"{sorted(presets.keys())} or an integer >= 0."
+            )
+        return presets[key]
+
+    raise TypeError("sentiment_depth must be int, str preset, or None.")
+
+
 def _resolve_device(device_arg: str | int) -> Any:
     """Resolves the computation device (CPU/GPU/MPS)."""
     if device_arg == "auto":
@@ -374,6 +420,7 @@ def generate_daily_sentiment_features(
     news_path: str,
     output_path: Optional[str] = None,
     n_sample_per_day: int = SAMPLES_PER_DAY,
+    sentiment_depth: int | str | None = None,
     cutoff_date: str = '2020-01-01',
     use_google_news: bool = False,
     force_compute: bool = False
@@ -384,6 +431,13 @@ def generate_daily_sentiment_features(
 
     Output (per company/date): sentiment_mean, sentiment_std, news_count, market_sentiment,
     sentiment_ma_7d (trend), sentiment_momentum_3d, sentiment_volatility_7d, sentiment_trend (alias of MA7).
+
+    Sampling control:
+    - ``sentiment_depth`` (recommended): preset string or int.
+      Presets: ``low``/``quick``=1, ``medium``/``balanced``=3, ``high``=5,
+      ``deep``/``full``/``all``=0 (no cap, use all headlines).
+    - ``n_sample_per_day`` remains for backward compatibility and is used when
+      ``sentiment_depth`` is not provided.
     """
     cache_path = output_path or SENTIMENT_CACHE
 
@@ -419,12 +473,20 @@ def generate_daily_sentiment_features(
             df = pd.concat([df, gn_df], ignore_index=True)
 
     # 3. Stratified Sampling (optional)
+    effective_n_sample_per_day = _resolve_sentiment_sample_size(
+        sentiment_depth=sentiment_depth,
+        fallback_n_sample_per_day=n_sample_per_day,
+    )
     raw_counts = None
-    if n_sample_per_day and n_sample_per_day > 0:
-        logger.info(f"Sampling {n_sample_per_day} items per day/company...")
+    if effective_n_sample_per_day and effective_n_sample_per_day > 0:
+        logger.info(f"Sampling {effective_n_sample_per_day} items per day/company...")
         # Capture raw counts first
         raw_counts = df.groupby(['date', 'company']).size().reset_index(name='news_count_raw')
-        df = df.sample(frac=1, random_state=42).groupby(['date', 'company']).head(n_sample_per_day)
+        df = (
+            df.sample(frac=1, random_state=42)
+            .groupby(['date', 'company'])
+            .head(effective_n_sample_per_day)
+        )
     
     # 4. Analysis
     analyzer = SentimentAnalyzer()
@@ -524,12 +586,18 @@ def display_demo_sentiment(
                 f"strict_match={strict_match}."
             )
 
-def run_sentiment_pipeline_for_report(stock_df: pd.DataFrame, config_obj: Any) -> pd.DataFrame:
+def run_sentiment_pipeline_for_report(
+    stock_df: pd.DataFrame,
+    config_obj: Any,
+    *,
+    sentiment_depth: int | str | None = None,
+) -> pd.DataFrame:
     """Wrapper to run the full pipeline in the report context."""
     return generate_daily_sentiment_features(
         news_path=config_obj.RAW_NEWS_PATH,
         output_path=config_obj.SENTIMENT_CACHE,
         n_sample_per_day=config_obj.SAMPLES_PER_DAY,
+        sentiment_depth=sentiment_depth,
         use_google_news=False,  # offline-safe default; enable explicitly if needed
         force_compute=getattr(config_obj, 'force_sentiment_compute', False)
     )
@@ -602,8 +670,13 @@ def integrate_sentiment_data(
     sent_df = news_data.copy()
     if 'date' in sent_df.columns:
         sent_df['date'] = pd.to_datetime(sent_df['date'])
+    elif isinstance(sent_df.index, pd.DatetimeIndex):
+        # Accept date-indexed sentiment frames (e.g., from cached pipeline helpers).
+        index_name = sent_df.index.name or "index"
+        sent_df = sent_df.reset_index().rename(columns={index_name: "date"})
+        sent_df["date"] = pd.to_datetime(sent_df["date"])
     else:
-        raise ValueError("news_data must contain a 'date' column")
+        raise ValueError("news_data must contain a 'date' column or a DatetimeIndex")
 
     # Determine company
     target_company = company_name
