@@ -11,6 +11,7 @@ import yfinance as yf
 from yfinance import Ticker
 
 from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, TICKERS
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
@@ -88,7 +89,7 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
             raise e
 
 
-def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.DataFrame:
+def fetch_auxiliary_data(start_date: str = None, end_date: str = None, verbose: bool = False) -> pd.DataFrame:
     """
     Fetches comprehensive market data for enrichment analysis.
     
@@ -110,18 +111,22 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
         cache_path = project_root / AUX_DATA_PATH
         
     if cache_path.exists():
-        print(f"Loading auxiliary data from cache: {cache_path}")
+        if verbose:
+            print(f"Loading auxiliary data from cache: {cache_path}")
         try:
             data = pd.read_parquet(cache_path)
+            data = canonicalize_feature_columns(data)
             # Ensure index is timezone-naive
             if data.index.tz is not None:
                 data.index = data.index.tz_localize(None)
             return data
         except Exception as e:
-            print(f"Error loading cache: {e}. Fetching fresh data.")
+            if verbose:
+                print(f"Error loading cache: {e}. Fetching fresh data.")
 
     # 2. Download from yfinance
-    print("Fetching auxiliary market data from yfinance...")
+    if verbose:
+        print("Fetching auxiliary market data from yfinance...")
     try:
         # Download data (default to 5y if dates not specified to match sample data)
         
@@ -134,6 +139,7 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
             
         # Rename columns using the mapping
         data = data.rename(columns=AUX_TICKER_MAP)
+        data = canonicalize_feature_columns(data)
         
         # Handle missing values (forward fill)
         data = data.ffill()
@@ -145,11 +151,13 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
         # 3. Save to Cache
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         data.to_parquet(cache_path)
-        print(f"Saved auxiliary data to {cache_path}")
+        if verbose:
+            print(f"Saved auxiliary data to {cache_path}")
             
         return data
     except Exception as e:
-        print(f"Error fetching auxiliary data: {e}")
+        if verbose:
+            print(f"Error fetching auxiliary data: {e}")
         return pd.DataFrame()
 
     

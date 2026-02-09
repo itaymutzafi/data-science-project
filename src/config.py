@@ -10,11 +10,19 @@ from calendar import month_name, day_name
 # Paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
+RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-AUX_DATA_PATH = "data/raw/auxiliary_market_data.parquet"
-RAW_NEWS_PATH = "data/raw/news_last_5y.parquet"
-PROCESSED_SENTIMENT_PATH = "data/processed/daily_sentiment.parquet"
-SENTIMENT_CACHE = "data/processed/daily_sentiment_features.csv"
+
+# Price & auxiliary caches
+RAW_PRICE_DIR = RAW_DIR  # can be split later to RAW_DIR / "prices"
+AUX_DATA_PATH = RAW_DIR / "auxiliary_market_data.parquet"
+
+# News caches (keep location stable; files stay ignored)
+RAW_NEWS_PATH = RAW_DIR / "news_last_5y.parquet"
+
+# Sentiment outputs
+PROCESSED_SENTIMENT_PATH = PROCESSED_DATA_DIR / "daily_sentiment.parquet"
+SENTIMENT_CACHE = PROCESSED_DATA_DIR / "daily_sentiment_features.csv"
 
 # Tickers / Companys
 TICKER_TO_COMPANY_MAP = {
@@ -37,7 +45,7 @@ AUX_TICKER_MAP = {
     'QQQ': 'Nasdaq_100',
     '^VIX': 'VIX_Index',
     '^TNX': 'Treasury_10Y',
-    'NVDA': 'NVIDIA_Segment_Leader'
+    'NVDA': 'NVDA_Leader',
 }
 SAMPLES_PER_DAY = 1
 
@@ -51,7 +59,7 @@ SENTIMENT_MOMENTUM_WINDOW = 3    # Short-term sentiment shift
 # Models
 SEED = 42
 DEF_SPLITS = 5
-SPLITS = 2
+SPLITS = DEF_SPLITS
 
 # Visualization Colors
 COMPANY_COLORS = {
@@ -70,5 +78,5 @@ AUX_COLORS = {
     'Nasdaq_100': '#663399',          # RebeccaPurple (Rich, distinct index color)
     'VIX_Index': '#E0115F',           # Ruby (Distinct from Microsoft Red, signaling alert)
     'Treasury_10Y': '#708090',        # SlateGray (Neutral, bond-like)
-    'NVIDIA_Segment_Leader': '#20B2AA' # LightSeaGreen (Distinct from Apple, tech-like)
+    'NVDA_Leader': '#20B2AA'          # LightSeaGreen (Distinct from Apple, tech-like)
 }

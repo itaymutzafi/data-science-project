@@ -27,6 +27,35 @@ def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_W
     print(f"Added Moving Average features: {windows} for {len(added)} stocks.")
     print(f"Note: First {max(windows)} rows will contain NaNs (Warm-up Period).")
 
+
+def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> None:
+    """
+    Adds Normalized Distance from Moving Averages.
+    Formula: (Price - MA) / MA
+    
+    Dynamically generates columns based on config (e.g. 'Dist_MA50', 'Dist_MA200').
+    """
+    print(f"Adding Features: Dist_MA {windows}...")
+    count = 0
+    for name, df in dfs.items():
+        for win in windows:
+            ma_col = f'MA{win}'
+            # Ensure baseline MA exists
+            if ma_col not in df.columns:
+                df[ma_col] = df['Close'].rolling(window=win).mean()
+            
+            # Calculate Normalized Distance
+            # Result is a percentage (e.g., 0.05 = 5% above trend)
+            col_name = f'Dist_MA{win}'
+            df[col_name] = (df['Close'] - df[ma_col]) / df[ma_col]
+            
+            # Fill NaNs
+            df[col_name] = df[col_name].fillna(0)
+        
+        dfs[name] = df
+        count += 1
+    print(f" -> Success: Distances added to {count} tickers.")
+
 def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
     added = []
     fast = 12

@@ -24,6 +24,16 @@ TARGETS = {
 }
 
 
+def _numeric_target_check_features(df: pd.DataFrame, target_col: str) -> List[str]:
+    """Select numeric features only and drop target/helper leakage columns."""
+    return [
+        c for c in df.columns
+        if c != target_col
+        and not str(c).startswith("Target")
+        and pd.api.types.is_numeric_dtype(df[c])
+    ]
+
+
 def check_targets(dfs: Dict[str, pd.DataFrame], n_splits:int = DEF_SPLITS):
     for model in models:
         targets_df = run_model_for_target(dfs, model, n_splits)
@@ -38,11 +48,35 @@ def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DE
         for ticker, df_orig in dfs.items():
             df = df_orig.copy()
             df["TargetBinary"] = target_fn(df)
-            df = df.dropna()
-            n_after = len(df)
+            feature_cols = _numeric_target_check_features(df, "TargetBinary")
+            if not feature_cols:
+                all_summary_rows.append({
+                    "Ticker": ticker,
+                    "Target": target_name,
+                    "Rows": 0,
+                    "Accuracy": float("nan"),
+                    "Precision": float("nan"),
+                    "Recall": float("nan"),
+                    "F1": float("nan"),
+                })
+                continue
+
+            df_model = df[feature_cols + ["TargetBinary"]].dropna()
+            n_after = len(df_model)
+            if n_after <= n_splits:
+                all_summary_rows.append({
+                    "Ticker": ticker,
+                    "Target": target_name,
+                    "Rows": n_after,
+                    "Accuracy": float("nan"),
+                    "Precision": float("nan"),
+                    "Recall": float("nan"),
+                    "F1": float("nan"),
+                })
+                continue
 
             results_df = run_binary_cls_with_feature_importance(
-                data=df,
+                data=df_model,
                 target_col="TargetBinary",
                 model=model,
                 ticker=ticker,

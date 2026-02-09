@@ -4,6 +4,18 @@ from . import experiment
 from .advanced import LSTMRegressor, XGBoostRegressor, RandomForestModel
 from .registry import get_model, list_available_models
 from .experiment import ExperimentRunner, ExperimentConfig
+from .model_zoo import (
+    CONTINUOUS_MODEL_ZOO,
+    DISCRETE_MODEL_ZOO,
+    ModelZooInputs,
+    ModelZooRun,
+    prepare_model_zoo_inputs,
+    build_model_zoo_config,
+    run_model_zoo,
+    run_continuous_model_zoo,
+    run_discrete_model_zoo,
+    get_top_metric_table,
+)
 from .binary_classification import run_binary_cls_with_feature_importance, run_binary_cls_embedded_importance
 from .targets import check_targets
 from .feature_selection import run_feature_selection, feature_selection_plot, get_best_k_features, get_all_top_features, \
@@ -22,6 +34,16 @@ __all__ = [
     "experiment",
     "ExperimentRunner",
     "ExperimentConfig",
+    "CONTINUOUS_MODEL_ZOO",
+    "DISCRETE_MODEL_ZOO",
+    "ModelZooInputs",
+    "ModelZooRun",
+    "prepare_model_zoo_inputs",
+    "build_model_zoo_config",
+    "run_model_zoo",
+    "run_continuous_model_zoo",
+    "run_discrete_model_zoo",
+    "get_top_metric_table",
     "run_binary_cls_with_feature_importance",
     "run_binary_cls_embedded_importance",
     "check_targets",
