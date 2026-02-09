@@ -70,24 +70,35 @@ def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
     return df
 
 def _get_reports_cache_path(ticker: str) -> Path:
-    cache_dir = PROJECT_ROOT / "data" / "raw" / "sec_filings"
+    cache_dir = Path(SEC_FILINGS_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{ticker}_sec_filings.parquet"
 
+def _get_legacy_reports_cache_path(ticker: str) -> Path:
+    return Path(LEGACY_SEC_FILINGS_CACHE_DIR) / f"{ticker}_sec_filings.parquet"
+
 def _load_reports_cache(ticker: str) -> List[dict]:
-    cache_path = _get_reports_cache_path(ticker)
-    if not cache_path.exists():
-        return []
-    try:
-        df = pd.read_parquet(cache_path)
-        if df.empty:
-            return []
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"])
-        return df.to_dict("records")
-    except Exception as exc:
-        print(f"Warning: failed to load filings cache for {ticker}: {exc}")
-        return []
+    primary_path = _get_reports_cache_path(ticker)
+    legacy_path = _get_legacy_reports_cache_path(ticker)
+
+    for cache_path in (primary_path, legacy_path):
+        if not cache_path.exists():
+            continue
+        try:
+            df = pd.read_parquet(cache_path)
+            if df.empty:
+                return []
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+
+            # One-time migration from legacy cache to primary layout.
+            if cache_path != primary_path:
+                _save_reports_cache(ticker, df.to_dict("records"))
+
+            return df.to_dict("records")
+        except Exception as exc:
+            print(f"Warning: failed to load filings cache for {ticker}: {exc}")
+    return []
 
 def _save_reports_cache(ticker: str, filings: List[dict]) -> None:
     cache_path = _get_reports_cache_path(ticker)

@@ -10,8 +10,8 @@ It provides a pipeline to:
 """
 
 import logging
-import os
 import textwrap
+from pathlib import Path
 from typing import List, Optional, Tuple, Any
 import numpy as np
 import pandas as pd
@@ -21,7 +21,15 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from src.config import TICKER_TO_COMPANY_MAP, SENTIMENT_CACHE, SAMPLES_PER_DAY, SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, COMPANY_COLORS
+from src.config import (
+    TICKER_TO_COMPANY_MAP,
+    SENTIMENT_CACHE,
+    LEGACY_SENTIMENT_CACHE,
+    SAMPLES_PER_DAY,
+    SENTIMENT_MA_WINDOW,
+    SENTIMENT_MOMENTUM_WINDOW,
+    COMPANY_COLORS,
+)
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.utils import set_style, apply_academic_style
 from transformers.utils import logging as hf_logging
@@ -439,13 +447,24 @@ def generate_daily_sentiment_features(
     - ``n_sample_per_day`` remains for backward compatibility and is used when
       ``sentiment_depth`` is not provided.
     """
-    cache_path = output_path or SENTIMENT_CACHE
+    cache_path = Path(output_path) if output_path else Path(SENTIMENT_CACHE)
+    legacy_cache_path = None if output_path else Path(LEGACY_SENTIMENT_CACHE)
+    cache_candidates = [cache_path]
+    if legacy_cache_path and legacy_cache_path != cache_path:
+        cache_candidates.append(legacy_cache_path)
 
-    if cache_path and os.path.exists(cache_path) and not force_compute:
-        logger.info(f"Loading cached sentiment: {cache_path}")
-        df = pd.read_csv(cache_path)
-        df['date'] = pd.to_datetime(df['date'])
-        return df
+    if not force_compute:
+        for candidate in cache_candidates:
+            if candidate.exists():
+                logger.info(f"Loading cached sentiment: {candidate}")
+                df = pd.read_csv(candidate)
+                df['date'] = pd.to_datetime(df['date'])
+
+                # One-time migration from legacy cache to primary layout.
+                if candidate != cache_path:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    df.to_csv(cache_path, index=False)
+                return df
 
     # 1. Load & Clean
     df = load_and_preprocess_news(news_path, cutoff_date=cutoff_date)
@@ -506,6 +525,7 @@ def generate_daily_sentiment_features(
     final_df = process_sentiment_timeseries(agg)
     
     if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
         final_df.to_csv(cache_path, index=False)
         
     return final_df

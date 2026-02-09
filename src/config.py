@@ -13,16 +13,31 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 
-# Price & auxiliary caches
-RAW_PRICE_DIR = RAW_DIR  # can be split later to RAW_DIR / "prices"
-AUX_DATA_PATH = RAW_DIR / "auxiliary_market_data.parquet"
+# Unified cache layout (primary)
+CACHE_DIR = DATA_DIR / "cache"
+PRICE_CACHE_DIR = CACHE_DIR / "prices"
+MARKET_CACHE_DIR = CACHE_DIR / "market"
+PROPHET_CACHE_DIR = CACHE_DIR / "prophet"
+SEC_FILINGS_CACHE_DIR = CACHE_DIR / "sec_filings"
+SENTIMENT_CACHE_DIR = CACHE_DIR / "sentiment"
+
+# Price & auxiliary caches (primary)
+RAW_PRICE_DIR = PRICE_CACHE_DIR
+AUX_DATA_PATH = MARKET_CACHE_DIR / "auxiliary_market_data.parquet"
+
+# Legacy cache layout (fallback read-paths)
+LEGACY_RAW_PRICE_DIR = RAW_DIR
+LEGACY_AUX_DATA_PATH = RAW_DIR / "auxiliary_market_data.parquet"
+LEGACY_PROPHET_CACHE_DIR = RAW_DIR / "prophet"
+LEGACY_SEC_FILINGS_CACHE_DIR = RAW_DIR / "sec_filings"
 
 # News caches (keep location stable; files stay ignored)
 RAW_NEWS_PATH = RAW_DIR / "news_last_5y.parquet"
 
 # Sentiment outputs
 PROCESSED_SENTIMENT_PATH = PROCESSED_DATA_DIR / "daily_sentiment.parquet"
-SENTIMENT_CACHE = PROCESSED_DATA_DIR / "daily_sentiment_features.csv"
+SENTIMENT_CACHE = SENTIMENT_CACHE_DIR / "daily_sentiment_features.csv"
+LEGACY_SENTIMENT_CACHE = PROCESSED_DATA_DIR / "daily_sentiment_features.csv"
 
 # Tickers / Companys
 TICKER_TO_COMPANY_MAP = {

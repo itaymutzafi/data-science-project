@@ -11,6 +11,7 @@ __all__ = [
     "get_news_df_from_file",
     "get_google_news_titles",
     "validate_schema",
+    "validate_schema_all_dfs",
     "eda_attr_comparative_plot",
     "eda_correlation",
     "stock_split_table",

@@ -86,17 +86,20 @@ python -m ipykernel install --user --name data-science-project --display-name "P
 
 ## Data Requirements
 Expected data locations:
-- Raw market snapshots and auxiliary data: `data/raw/`
-- News corpus and sentiment inputs: `data/raw/`
-- Computed sentiment features: `data/processed/`
+- News corpus (shared file): `data/raw/`
+- Runtime caches (primary): `data/cache/`
+- Legacy fallback caches (auto-migrated on read): `data/raw/` and `data/processed/`
 
 Key files commonly used by the notebook:
-- `data/raw/AAPL.parquet`, `data/raw/AMZN.parquet`, `data/raw/GOOG.parquet`, `data/raw/MSFT.parquet`
-- `data/raw/auxiliary_market_data.parquet`
 - `data/raw/news_last_5y.parquet`
-- `data/processed/daily_sentiment_features.csv`
+- `data/cache/prices/AAPL.parquet`, `data/cache/prices/AMZN.parquet`, `data/cache/prices/GOOG.parquet`, `data/cache/prices/MSFT.parquet`
+- `data/cache/market/auxiliary_market_data.parquet`
+- `data/cache/prophet/<TICKER>_prophet_predictions.parquet`
+- `data/cache/sec_filings/<TICKER>_sec_filings.parquet`
+- `data/cache/sentiment/daily_sentiment_features.csv`
 
-If some raw caches are missing, the notebook can regenerate required subsets where supported by the pipeline.
+If primary caches are missing, the pipeline can regenerate them. If legacy caches exist,
+the code reads them and materializes the primary cache layout automatically.
 
 ## How To Run
 1. Activate the project environment.
@@ -132,10 +135,16 @@ The codebase enforces several principles to protect validity:
 - Lagged integration of sentiment features to reduce leakage risk.
 - Feature-set governance via `src/features/sets.py`, including collinearity-aware block sampling.
 - Consistent naming canonicalization via `src/utils/feature_names.py`.
+- Two-tier schema validation in `src/data/validate_schema.py`:
+  - Default lightweight startup gate (`strict=False`).
+  - Full schema/type checks when explicitly enabled (`strict=True`), e.g. after fresh API refresh.
 
 ## Engineering Notes
 - The project favors notebook-report reproducibility over ad hoc scripts.
-- Caches are kept under `data/raw` and `data/processed` for deterministic reruns.
+- Caches are unified under `data/cache/` for deterministic reruns and clearer ownership.
+- Backward compatibility is preserved: legacy caches under `data/raw`/`data/processed` are still readable.
+- The shared news source remains stable at `data/raw/news_last_5y.parquet`.
+- Schemas are stored under `src/data/schemas/` (legacy path fallback is kept for compatibility).
 - Environment helpers are provided under `scripts/`:
   - `setup_env.sh`: first-time setup.
   - `install_kernel.sh`: kernel registration only.
