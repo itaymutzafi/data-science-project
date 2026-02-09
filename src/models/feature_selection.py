@@ -12,9 +12,40 @@ import colorsys
 from src.models import run_binary_cls_with_feature_importance, run_binary_cls_embedded_importance
 from src.config import DEF_SPLITS, COMPANY_COLORS, SPLITS
 from src.features import build_feature_to_block_map
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 EXCLUDE_TARGET_COLS = ["TargetRegression", "TargetBinary"]
+
+
+def _ensure_binary_target(df: pd.DataFrame, target_col: str = "TargetBinary") -> pd.DataFrame:
+    """Ensure a binary target column exists for feature-selection routines."""
+    prepared = df.copy()
+    if target_col not in prepared.columns:
+        if "Log_Return" not in prepared.columns:
+            raise KeyError(f"Missing '{target_col}' and 'Log_Return' is unavailable to derive it.")
+        prepared[target_col] = (prepared["Log_Return"].shift(-1) > 0).astype(int)
+    return prepared
+
+
+def _as_ticker_frame_dict(dfs: Dict[str, pd.DataFrame] | pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """Normalize feature-selection input into {ticker: dataframe} format."""
+    if isinstance(dfs, dict):
+        return {ticker: canonicalize_feature_columns(frame.copy()) for ticker, frame in dfs.items()}
+    if isinstance(dfs, pd.DataFrame):
+        if "Ticker" not in dfs.columns:
+            raise ValueError("DataFrame input must include a 'Ticker' column for feature selection.")
+        return {ticker: canonicalize_feature_columns(frame.copy()) for ticker, frame in dfs.groupby("Ticker")}
+    raise TypeError("Feature selection input must be a dict[ticker, dataframe] or a dataframe with 'Ticker'.")
+
+
+def _numeric_feature_columns(df: pd.DataFrame, target_col: str) -> List[str]:
+    """Return numeric candidate features, excluding target helper columns."""
+    excluded = {target_col, *EXCLUDE_TARGET_COLS}
+    return [
+        c for c in df.columns
+        if c not in excluded and pd.api.types.is_numeric_dtype(df[c])
+    ]
 
 
 def forward_feature_selection(
@@ -28,10 +59,7 @@ def forward_feature_selection(
     results = []
     selected_features = []
 
-    candidate_features = [
-        c for c in df.columns
-        if c not in [target_col] and c not in EXCLUDE_TARGET_COLS
-    ]
+    candidate_features = _numeric_feature_columns(df, target_col)
 
     max_features = max_features or len(candidate_features)
 
@@ -75,7 +103,8 @@ def forward_feature_selection(
 
     return pd.DataFrame(results)
 
-def run_feature_selection(dfs: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS) -> pd.DataFrame:
+def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
+    dfs = _as_ticker_frame_dict(dfs)
     all_forward_histories = []
 
     for ticker, df in dfs.items():
@@ -83,8 +112,7 @@ def run_feature_selection(dfs: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLI
         print(f"Forward selection for {ticker}")
         print(f"==============================")
 
-        df["TargetBinary"] = (df["Log_Return"].shift(-1) > 0).astype(int)
-        df = df.dropna()
+        df = _ensure_binary_target(df, "TargetBinary").dropna()
 
         history_df = forward_feature_selection(
             df=df,
@@ -142,7 +170,9 @@ def feature_selection_plot(df: pd.DataFrame):
     plt.title("Forward Selection – Best Feature Count per Ticker")
     plt.legend()
     plt.grid(True, alpha=0.3)
+    
     plt.show()
+    plt.close()
 
 def get_best_k_features(df: pd.DataFrame, K: int=10, add_prints: bool = True) -> Dict[str, List[str]]:
     best_features = {}
@@ -180,9 +210,17 @@ def get_embedding_importance_features(
     embedding_accuracy = {}
 
     for ticker, ticker_df in dfs.items():
+        ticker_df = _ensure_binary_target(ticker_df, target_col).dropna()
+        feature_cols = _numeric_feature_columns(ticker_df, target_col)
+        if not feature_cols:
+            embedding_features[ticker] = []
+            embedding_accuracy[ticker] = np.nan
+            continue
+        model_df = ticker_df[feature_cols + [target_col]]
+
         # --- 1. Get feature importance ---
         imp = run_binary_cls_embedded_importance(
-            data=ticker_df,
+            data=model_df,
             target_col=target_col,
             model=model,
             ticker=ticker,
@@ -207,7 +245,7 @@ def get_embedding_importance_features(
 
         # --- 2. Evaluate accuracy using same pipeline ---
         res = run_binary_cls_with_feature_importance(
-            data=ticker_df[top_features + [target_col]],
+            data=model_df[top_features + [target_col]],
             target_col=target_col,
             model=model,
             ticker=ticker,
@@ -268,10 +306,21 @@ def get_experimet_lr_best_features(
 
     for _, row in best_per_ticker.iterrows():
         ticker = row["Ticker"]
-        fset_id = row["FeatureSet"]
+
+        # FeatureSet is stored as string in results CSV; convert to int to match
+        # the keys inside ticker_diverse_sets (1..n). If conversion fails or the
+        # id is missing, raise a clear error instead of returning None later.
+        try:
+            fset_id = int(row["FeatureSet"])
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid FeatureSet id for ticker {ticker}: {row['FeatureSet']}")
+
         acc = row["Accuracy"]
 
         features = ticker_diverse_sets[ticker].get(fset_id)
+        if features is None:
+            raise KeyError(f"FeatureSet {fset_id} not found for ticker {ticker} in ticker_diverse_sets")
+
         best_features[ticker] = features
         best_accuracy[ticker] = acc
         print(f"{ticker}: {features}")
@@ -349,7 +398,9 @@ def plot_block_usage_stacked(df: pd.DataFrame):
     plt.grid(axis="y", alpha=0.25)
 
     plt.tight_layout()
+    
     plt.show()
+    plt.close()
 
 
 def powerset(features: List[str]) -> List[List[str]]:
@@ -377,7 +428,8 @@ def evaluate_feature_subsets(
     original_set = set(original_features)
 
     for subset_idx, features in enumerate(subsets):
-        feature_set = set(features)
+        valid_features = [f for f in features if f in data.columns and f != target_col]
+        feature_set = set(valid_features)
 
         # --- CASE 1: this is the original best set ---
         if feature_set == original_set:
@@ -385,24 +437,27 @@ def evaluate_feature_subsets(
 
         # --- CASE 2: evaluate normally ---
         else:
-            df_sub = data[features + [target_col]]
+            if not valid_features:
+                acc = np.nan
+            else:
+                df_sub = data[valid_features + [target_col]]
 
-            res = run_binary_cls_with_feature_importance(
-                data=df_sub,
-                target_col=target_col,
-                model=model,
-                ticker=ticker,
-                n_splits=n_splits
-            )
+                res = run_binary_cls_with_feature_importance(
+                    data=df_sub,
+                    target_col=target_col,
+                    model=model,
+                    ticker=ticker,
+                    n_splits=n_splits
+                )
 
-            acc = res["Accuracy"].mean()
+                acc = res["Accuracy"].mean() if not res.empty else np.nan
 
         rows.append({
             "Ticker": ticker,
             "SubsetIndex": subset_idx,
-            "NumFeatures": len(features),
+            "NumFeatures": len(valid_features),
             "Accuracy": acc,
-            "Features": features,
+            "Features": valid_features,
         })
 
     return pd.DataFrame(rows)
@@ -416,22 +471,34 @@ def get_subset_results(
     all_results = []
 
     for ticker, feature_set in top_features.items():
-        subsets = powerset(feature_set)
+        prepared_df = _ensure_binary_target(dfs[ticker], "TargetBinary").dropna()
+        available_features = [f for f in feature_set if f in prepared_df.columns]
+        missing_features = [f for f in feature_set if f not in prepared_df.columns]
+        if missing_features:
+            print(f"{ticker}: dropped unavailable features {missing_features}")
+
+        if not available_features:
+            print(f"{ticker}: no available features left for subset evaluation")
+            continue
+
+        subsets = powerset(available_features)
         print(f"{ticker}: {len(subsets)} subsets")
 
         df_subsets = evaluate_feature_subsets(
-            data=dfs[ticker],
+            data=prepared_df,
             target_col="TargetBinary",
             subsets=subsets,
             model=LogisticRegression(),
             ticker=ticker,
             n_splits=SPLITS,
-            original_features=feature_set,
-            original_accuracy=original_accuracy[ticker],
+            original_features=available_features,
+            original_accuracy=original_accuracy.get(ticker, np.nan),
         )
 
         all_results.append(df_subsets)
 
+    if not all_results:
+        return pd.DataFrame(columns=["Ticker", "SubsetIndex", "NumFeatures", "Accuracy", "Features"])
     return pd.concat(all_results, ignore_index=True)
 
 
@@ -462,11 +529,27 @@ def get_best_accuracy_feature_selection(
     forward_results_df: pd.DataFrame
 ) -> pd.DataFrame:
     rows = []
+    wrapper_accuracy = (
+        forward_results_df.groupby("Ticker")["Accuracy"]
+        .max()
+        .to_dict()
+    )
+    baseline_by_source = {
+        "top_experiment": top_experiment_accuracy,
+        "top_10_embedding": top_10_embedding_accuracy,
+        "top_10_wrapper": wrapper_accuracy,
+        "all": top_experiment_accuracy,
+    }
 
     for top_name, top_features in top_features_strategies.items():
         print(f"{top_name}:")
+        source_baseline = baseline_by_source.get(top_name, top_experiment_accuracy)
+        subset_results = get_subset_results(top_features, dfs, source_baseline)
+        if subset_results.empty:
+            print(f"{top_name}: no valid subset results\n")
+            continue
         best_df = (
-            get_subset_results(top_features, dfs, top_10_embedding_accuracy)
+            subset_results
             .sort_values("Accuracy", ascending=False)
             .groupby("Ticker", as_index=False)
             .first()
@@ -493,12 +576,7 @@ def get_best_accuracy_feature_selection(
         })
     
     # --- ORIGINAL wrapper baseline ---
-    wrapper_accuracy_df = (
-        forward_results_df.groupby("Ticker")["Accuracy"]
-        .max()
-        .to_dict()
-    )
-    for ticker, acc in wrapper_accuracy_df.items():
+    for ticker, acc in wrapper_accuracy.items():
         rows.append({
             "Source": "original_wrapper",
             "Ticker": ticker,
@@ -592,7 +670,9 @@ def plot_accuracy_by_strategy(df: pd.DataFrame):
 
     plt.grid(axis="y", alpha=0.3)
     plt.tight_layout()
+    
     plt.show()
+    plt.close()
 
 
 def forward_feature_selection_per_fold(
@@ -607,10 +687,7 @@ def forward_feature_selection_per_fold(
     rows = []
     selected_features = []
 
-    candidate_features = [
-        c for c in df.columns
-        if c not in [target_col] and c not in EXCLUDE_TARGET_COLS
-    ]
+    candidate_features = _numeric_feature_columns(df, target_col)
 
     max_features = max_features or len(candidate_features)
 
@@ -671,9 +748,7 @@ def run_forward_selection_per_fold(
         print(f"Forward selection (per fold) for {ticker}")
         print(f"==============================")
 
-        df = df.copy()
-        df["TargetBinary"] = (df["Log_Return"].shift(-1) > 0).astype(int)
-        df = df.dropna()
+        df = _ensure_binary_target(df, "TargetBinary").dropna()
 
         hist_df = forward_feature_selection_per_fold(
             df=df,
@@ -734,9 +809,7 @@ def plot_forward_selection_per_fold(
         sub = fs_fold_df[fs_fold_df["Ticker"] == ticker]
 
         # rebuild df exactly as in training
-        df = dfs[ticker].copy()
-        df["TargetBinary"] = (df["Log_Return"].shift(-1) > 0).astype(int)
-        df = df.dropna()
+        df = _ensure_binary_target(dfs[ticker], "TargetBinary").dropna()
 
         fold_ranges = get_fold_time_ranges(df, n_splits)
 
@@ -770,4 +843,6 @@ def plot_forward_selection_per_fold(
         plt.legend(fontsize=9)
         plt.grid(alpha=0.3)
         plt.tight_layout()
+        
         plt.show()
+        plt.close()

@@ -8,6 +8,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.egg-info/
 .venv/
 venv/
 env/
@@ -37,3 +38,6 @@ experiment_run.log
 
 # Large Data
 /data/
+
+# Cache layout (explicit)
+/data/cache/

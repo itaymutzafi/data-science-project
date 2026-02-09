@@ -10,7 +10,15 @@ import pandas as pd
 import yfinance as yf
 from yfinance import Ticker
 
-from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, TICKERS
+from src.config import (
+    AUX_DATA_PATH,
+    AUX_TICKER_MAP,
+    LEGACY_AUX_DATA_PATH,
+    LEGACY_RAW_PRICE_DIR,
+    RAW_PRICE_DIR,
+    TICKERS,
+)
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
@@ -19,11 +27,12 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
     Implements local caching to avoid repeated API calls.
     Only fetches new data if the requested date range differs from cached data.
     """
-    # Define cache path
+    # Define cache paths
     ticker_name = ticker.ticker
-    project_root = Path(__file__).resolve().parents[2]
-    cache_dir = project_root / "data" / "raw"
-    cache_path = cache_dir / f"{ticker_name}.parquet"
+    primary_cache_dir = Path(RAW_PRICE_DIR)
+    primary_cache_path = primary_cache_dir / f"{ticker_name}.parquet"
+    legacy_cache_path = Path(LEGACY_RAW_PRICE_DIR) / f"{ticker_name}.parquet"
+    cache_path = primary_cache_path if primary_cache_path.exists() else legacy_cache_path
     
     # Check cache
     if cache_path.exists():
@@ -43,6 +52,10 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
         end_covered = abs(end_diff) <= 5
         
         if start_covered and end_covered:
+            # One-time migration: if loaded from legacy, materialize in primary cache layout.
+            if cache_path != primary_cache_path:
+                primary_cache_dir.mkdir(parents=True, exist_ok=True)
+                df.to_parquet(primary_cache_path)
             print(f"Data for {ticker_name} is up-to-date (covers {start_time} to {end_time}). Using cached data.")
             return df
         else:
@@ -66,29 +79,29 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
         
         # Save to cache
         if save_file:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            df.to_parquet(cache_path)
-            print(f"Saved {ticker_name} data to {cache_path}")
+            primary_cache_dir.mkdir(parents=True, exist_ok=True)
+            df.to_parquet(primary_cache_path)
+            print(f"Saved {ticker_name} data to {primary_cache_path}")
         
         return df
 
     except Exception as e:
         print(f"Failed to fetch data for {ticker_name} from yfinance: {e}")
         
-        if cache_path.exists():
-            print(f"WARNING: Falling back to EXISTING CACHE for {ticker_name}. Data coverage might be incomplete.")
-            df = pd.read_parquet(cache_path)
-            
-            # Ensure index is timezone-naive for consistency
-            if df.index.tz is not None:
-                df.index = df.index.tz_localize(None)
-            return df
-        else:
-            print(f"CRITICAL: No local cache available for {ticker_name} to fallback to.")
-            raise e
+        for fallback_path in (primary_cache_path, legacy_cache_path):
+            if fallback_path.exists():
+                print(f"WARNING: Falling back to EXISTING CACHE for {ticker_name}. Data coverage might be incomplete.")
+                df = pd.read_parquet(fallback_path)
+                
+                # Ensure index is timezone-naive for consistency
+                if df.index.tz is not None:
+                    df.index = df.index.tz_localize(None)
+                return df
+        print(f"CRITICAL: No local cache available for {ticker_name} to fallback to.")
+        raise e
 
 
-def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.DataFrame:
+def fetch_auxiliary_data(start_date: str = None, end_date: str = None, verbose: bool = False) -> pd.DataFrame:
     """
     Fetches comprehensive market data for enrichment analysis.
     
@@ -101,27 +114,34 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
     Returns:
         pd.DataFrame: A unified DataFrame with renamed columns for clarity.
     """
-    # 1. Check Cache
-    project_root = Path(__file__).resolve().parents[2]
-    # Handle relative path from config
-    if Path(AUX_DATA_PATH).is_absolute():
-        cache_path = Path(AUX_DATA_PATH)
-    else:
-        cache_path = project_root / AUX_DATA_PATH
-        
-    if cache_path.exists():
-        print(f"Loading auxiliary data from cache: {cache_path}")
-        try:
-            data = pd.read_parquet(cache_path)
-            # Ensure index is timezone-naive
-            if data.index.tz is not None:
-                data.index = data.index.tz_localize(None)
-            return data
-        except Exception as e:
-            print(f"Error loading cache: {e}. Fetching fresh data.")
+    # 1. Check Cache (primary first, then legacy path)
+    primary_cache_path = Path(AUX_DATA_PATH)
+    legacy_cache_path = Path(LEGACY_AUX_DATA_PATH)
+
+    for cache_path in (primary_cache_path, legacy_cache_path):
+        if cache_path.exists():
+            if verbose:
+                print(f"Loading auxiliary data from cache: {cache_path}")
+            try:
+                data = pd.read_parquet(cache_path)
+                data = canonicalize_feature_columns(data)
+                # Ensure index is timezone-naive
+                if data.index.tz is not None:
+                    data.index = data.index.tz_localize(None)
+
+                # One-time migration from legacy cache to primary layout.
+                if cache_path != primary_cache_path:
+                    primary_cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    data.to_parquet(primary_cache_path)
+
+                return data
+            except Exception as e:
+                if verbose:
+                    print(f"Error loading cache: {e}. Fetching fresh data.")
 
     # 2. Download from yfinance
-    print("Fetching auxiliary market data from yfinance...")
+    if verbose:
+        print("Fetching auxiliary market data from yfinance...")
     try:
         # Download data (default to 5y if dates not specified to match sample data)
         
@@ -134,6 +154,7 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
             
         # Rename columns using the mapping
         data = data.rename(columns=AUX_TICKER_MAP)
+        data = canonicalize_feature_columns(data)
         
         # Handle missing values (forward fill)
         data = data.ffill()
@@ -143,13 +164,15 @@ def fetch_auxiliary_data(start_date: str = None, end_date: str = None) -> pd.Dat
             data.index = data.index.tz_localize(None)
             
         # 3. Save to Cache
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        data.to_parquet(cache_path)
-        print(f"Saved auxiliary data to {cache_path}")
+        primary_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        data.to_parquet(primary_cache_path)
+        if verbose:
+            print(f"Saved auxiliary data to {primary_cache_path}")
             
         return data
     except Exception as e:
-        print(f"Error fetching auxiliary data: {e}")
+        if verbose:
+            print(f"Error fetching auxiliary data: {e}")
         return pd.DataFrame()
 
     

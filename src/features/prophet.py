@@ -7,30 +7,48 @@ from yfinance import Ticker
 from datetime import date
 from pathlib import Path
 
-from src.config import START_DATE, END_DATE, DEF_SPLITS, PROJECT_ROOT
+from src.config import (
+    START_DATE,
+    END_DATE,
+    DEF_SPLITS,
+    LEGACY_PROPHET_CACHE_DIR,
+    PROPHET_CACHE_DIR,
+)
 from src.data import fetch_sample_data
 from src.features import add_return_features
 
 def _get_prophet_cache_path(ticker: str) -> Path:
-    cache_dir = PROJECT_ROOT / "data" / "raw" / "prophet"
+    cache_dir = Path(PROPHET_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{ticker}_prophet_predictions.parquet"
 
+def _get_legacy_prophet_cache_path(ticker: str) -> Path:
+    return Path(LEGACY_PROPHET_CACHE_DIR) / f"{ticker}_prophet_predictions.parquet"
+
 def _load_prophet_cache(ticker: str) -> pd.DataFrame:
-    cache_path = _get_prophet_cache_path(ticker)
-    if not cache_path.exists():
-        return pd.DataFrame()
-    try:
-        df = pd.read_parquet(cache_path)
-        if not df.empty:
-            df.index = pd.to_datetime(df.index)
-        return df
-    except Exception as exc:
-        print(f"Warning: failed to load prophet cache for {ticker}: {exc}")
-        return pd.DataFrame()
+    primary_path = _get_prophet_cache_path(ticker)
+    legacy_path = _get_legacy_prophet_cache_path(ticker)
+
+    for cache_path in (primary_path, legacy_path):
+        if not cache_path.exists():
+            continue
+        try:
+            df = pd.read_parquet(cache_path)
+            if not df.empty:
+                df.index = pd.to_datetime(df.index)
+
+            # One-time migration from legacy cache to primary layout.
+            if cache_path != primary_path:
+                _save_prophet_cache(ticker, df)
+
+            return df
+        except Exception as exc:
+            print(f"Warning: failed to load prophet cache for {ticker}: {exc}")
+    return pd.DataFrame()
 
 def _save_prophet_cache(ticker: str, df: pd.DataFrame) -> None:
     cache_path = _get_prophet_cache_path(ticker)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path)
 
 def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS, force_refresh: bool = False):
@@ -139,4 +157,3 @@ def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS, fo
             how="left"
         )
         stocks_data[stock_name] = stock_df
-

@@ -1,4 +1,5 @@
 # requirements.txt
+
 # Core data science
 numpy>=1.26.0
 pandas>=2.2.0
@@ -6,38 +7,33 @@ matplotlib>=3.8.0
 seaborn>=0.13.0
 scipy>=1.12.0
 statsmodels>=0.14.0
-feedparser
-datasets
-xgboost
-prophet
-plotly>=5.0.0
-
-# Financial data
-yfinance>=0.2.30
 pyarrow>=14.0.0
+tqdm>=4.66.0
 
+# Data ingestion
+yfinance>=0.2.30
+feedparser>=6.0.10
+datasets>=2.17.0
+huggingface_hub>=0.20.0
 
-# Machine learning
-transformers>=4.30.0
-torch>=2.0.0
+# Modeling / ML
 scikit-learn>=1.4.0
-# xgboost>=2.0.0   # optional: uncomment when using XGBoost
-# lightgbm         # optional: add if using LightGBM
-huggingface_hub
+torch>=2.0.0
+transformers>=4.30.0
+xgboost>=2.0.0
+prophet>=1.1.5
 
-# Explainability (optional)
-# shap>=0.45.0     # uncomment when running SHAP analyses
-
-# Development / notebooks
+# Visualization / notebooks
+plotly>=5.0.0
 jupyter>=1.0.0
 jupyterlab>=4.0.0
 ipykernel>=6.29.0
-tqdm>=4.66.0
-pytest>=8.0.0
+ipywidgets>=8.0.0
 
-# Formatting / linting (optional)
+# Development / tests / formatting
+pytest>=8.0.0
 black>=24.0.0
 
-# Notes:
-# - Relaxed pins for cross-platform compatibility (Mac/Linux/Windows).
-# - Use `pip install -r requirements.txt` to install.
+# Optional:
+# lightgbm          # add if using LightGBM models
+# shap>=0.45.0      # for SHAP explainability

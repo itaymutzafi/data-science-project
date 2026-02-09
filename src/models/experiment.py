@@ -8,6 +8,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+import gc
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
@@ -16,6 +17,7 @@ from tqdm import tqdm
 
 from src.evaluation import metrics
 from src.features import experiment_create_target_variable
+from src.utils.feature_names import canonicalize_feature_columns
 from src.models import registry
 from src.config import DEF_SPLITS
 
@@ -70,6 +72,8 @@ class ExperimentConfig:
     start_date: str
     end_date: str
     n_splits: int = DEF_SPLITS
+    show_progress: bool = True
+    log_missing_features: bool = False
 
 
 class ExperimentRunner:
@@ -85,6 +89,7 @@ class ExperimentRunner:
         self.raw_dfs = df_dict
         self.config = config
         self.results: List[Dict[str, Any]] = []
+
 
     def _prepare_data(self, ticker: str, feature_set: List[str]) -> Tuple[pd.DataFrame, str, List[str]]:
         """Prepares X and y for a specific ticker and feature set.
@@ -102,7 +107,7 @@ class ExperimentRunner:
         Raises:
             ValueError: If no features are available or data is empty.
         """
-        df = self.raw_dfs[ticker].copy()
+        df = canonicalize_feature_columns(self.raw_dfs[ticker].copy())
 
         # 1. Generate Target
         df, target_col = experiment_create_target_variable(
@@ -115,7 +120,11 @@ class ExperimentRunner:
         available_feats = [f for f in feature_set if f in df.columns]
         missing_feats = set(feature_set) - set(available_feats)
         if missing_feats:
-            logger.warning(f"Ticker {ticker}: Missing features {missing_feats}")
+            message = f"Ticker {ticker}: Missing features {missing_feats}"
+            if self.config.log_missing_features:
+                logger.warning(message)
+            else:
+                logger.debug(message)
 
         if not available_feats:
             raise ValueError(f"No features available for {ticker} in set {feature_set}")
@@ -155,15 +164,16 @@ class ExperimentRunner:
                 f"Incompatible models for target_type '{self.config.target_type}': {incompatible}"
             )
 
+        # Calculate exact total steps based on actual feature sets provided
         total_steps = sum(
-            len(self.config.feature_sets[ticker]) * len(self.config.models)
-            for ticker in self.config.tickers
-        )
+            len(fsets) for fsets in self.config.feature_sets.values()
+        ) * len(self.config.models)
 
         logger.info(f"Starting Experiment: {total_steps} combinations.")
         logger.info(f"Target: {self.config.target_type} ({self.config.target_horizon}D)")
 
-        with tqdm(total=total_steps, desc="Running Grid") as pbar:
+        pbar = tqdm(total=total_steps, desc="Running Grid") if self.config.show_progress else None
+        try:
             for ticker in self.config.tickers:
                 ticker_feature_sets = self.config.feature_sets[ticker]  # Dict[str, List[str]]
 
@@ -179,10 +189,21 @@ class ExperimentRunner:
                         except Exception as e:
                             logger.error(f"Failed {ticker}|{fset_id}|{model_name}: {e}")
                         finally:
-                            pbar.update(1)
+                            gc.collect()
+                            if pbar is not None:
+                                pbar.update(1)
+        finally:
+            if pbar is not None:
+                pbar.close()
 
 
-    def _run_single_experiment(self, ticker: str, fset_id: int, fset_features: List[str], model_name: str) -> None:
+    def _run_single_experiment(
+        self,
+        ticker: str,
+        fset_id: int,
+        fset_features: List[str],
+        model_name: str,
+    ) -> None:
         """Runs a single combination of Ticker, FeatureSet, and Model.
 
         Args:
@@ -204,7 +225,14 @@ class ExperimentRunner:
         model = registry.get_model(model_name, input_size=input_size)
 
         # 4. Execution (Walk-Forward Validation)
-        self._run_walk_forward_validation(data, target_col, model, model_name, ticker, fset_id)
+        self._run_walk_forward_validation(
+            data=data,
+            target_col=target_col,
+            model=model,
+            model_name=model_name,
+            ticker=ticker,
+            fset_id=fset_id,
+        )
 
     def _run_walk_forward_validation(
         self,
@@ -213,7 +241,7 @@ class ExperimentRunner:
         model: Any,
         model_name: str,
         ticker: str,
-        fset_id: int
+        fset_id: int,
     ) -> None:
         """Performs Time-Series Walk-Forward validation.
 
@@ -261,7 +289,12 @@ class ExperimentRunner:
                     preds_series = (preds_series > 0.5).astype(int)
                 fold_metrics = metrics.evaluate_classification(y_val, preds_series)
             else:
-                fold_metrics = metrics.evaluate_regression(y_val, preds_series, model_name)
+                fold_metrics = metrics.evaluate_regression(
+                    y_val,
+                    preds_series,
+                    model_name,
+                    n_features=X.shape[1],
+                )
 
             # Store result
             result_row = {
@@ -273,12 +306,15 @@ class ExperimentRunner:
                 "Fold": fold,
                 **fold_metrics
             }
+            # Keep all fold-level rows in memory for deterministic downstream aggregation.
             self.results.append(result_row)
 
     def get_results_df(self) -> pd.DataFrame:
         """Convert results list to DataFrame.
-
-        Returns:
-            pd.DataFrame: Aggregated results.
         """
-        return pd.DataFrame(self.results)
+        if self.results:
+            return pd.DataFrame(self.results)
+        
+        # Return empty dataframe with expected columns to prevent KeyErrors downstream
+        expected_cols = ["Ticker", "FeatureSet", "Model", "TargetType", "Diff", "Fold"]
+        return pd.DataFrame(columns=expected_cols)

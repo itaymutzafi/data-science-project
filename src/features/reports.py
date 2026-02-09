@@ -7,6 +7,7 @@ import yfinance as yf
 from pathlib import Path
 
 from src.config import *
+from src.utils.feature_names import canonicalize_feature_columns
 
 
 def plot_sec_fiilings_dates(reports_by_company):
@@ -62,30 +63,42 @@ def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
         direction='nearest',
     )
     nearest.index = df.index
-    df['Days To Nearest Report'] = abs((nearest['filing_date'] - nearest.index)).dt.days
-    df['Days To Nearest Report'] = df['Days To Nearest Report'].fillna(np.inf)
+    df['Days_To_Nearest_Report'] = abs((nearest['filing_date'] - nearest.index)).dt.days
+    df['Days_To_Nearest_Report'] = df['Days_To_Nearest_Report'].fillna(np.inf)
+    df = canonicalize_feature_columns(df)
 
     return df
 
 def _get_reports_cache_path(ticker: str) -> Path:
-    cache_dir = PROJECT_ROOT / "data" / "raw" / "sec_filings"
+    cache_dir = Path(SEC_FILINGS_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{ticker}_sec_filings.parquet"
 
+def _get_legacy_reports_cache_path(ticker: str) -> Path:
+    return Path(LEGACY_SEC_FILINGS_CACHE_DIR) / f"{ticker}_sec_filings.parquet"
+
 def _load_reports_cache(ticker: str) -> List[dict]:
-    cache_path = _get_reports_cache_path(ticker)
-    if not cache_path.exists():
-        return []
-    try:
-        df = pd.read_parquet(cache_path)
-        if df.empty:
-            return []
-        if "date" in df.columns:
-            df["date"] = pd.to_datetime(df["date"])
-        return df.to_dict("records")
-    except Exception as exc:
-        print(f"Warning: failed to load filings cache for {ticker}: {exc}")
-        return []
+    primary_path = _get_reports_cache_path(ticker)
+    legacy_path = _get_legacy_reports_cache_path(ticker)
+
+    for cache_path in (primary_path, legacy_path):
+        if not cache_path.exists():
+            continue
+        try:
+            df = pd.read_parquet(cache_path)
+            if df.empty:
+                return []
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"])
+
+            # One-time migration from legacy cache to primary layout.
+            if cache_path != primary_path:
+                _save_reports_cache(ticker, df.to_dict("records"))
+
+            return df.to_dict("records")
+        except Exception as exc:
+            print(f"Warning: failed to load filings cache for {ticker}: {exc}")
+    return []
 
 def _save_reports_cache(ticker: str, filings: List[dict]) -> None:
     cache_path = _get_reports_cache_path(ticker)
@@ -138,8 +151,8 @@ def reports(dfs: Dict[str, pd.DataFrame], force_refresh: bool = False) -> None:
         reports_list = reports_by_company[company]
         reports_df = pd.DataFrame(reports_list)
         if "date" not in reports_df.columns or reports_df.empty:
-            print(f"No filing dates available for {company}. Filling 'Days To Nearest Report' with NaNs.")
-            df['Days To Nearest Report'] = np.nan
+            print(f"No filing dates available for {company}. Filling 'Days_To_Nearest_Report' with NaNs.")
+            df['Days_To_Nearest_Report'] = np.nan
             continue
         report_dates = reports_df["date"]
         dfs[company] = create_days_to_report(df, report_dates)

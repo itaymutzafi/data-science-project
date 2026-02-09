@@ -162,7 +162,11 @@ def _evaluate_models(
         aligned_idx = y_val.index.intersection(preds_series.index)
         if aligned_idx.empty:
             continue
-        metrics = evaluate_regression(y_val.loc[aligned_idx], preds_series.loc[aligned_idx])
+        metrics = evaluate_regression(
+            y_val.loc[aligned_idx],
+            preds_series.loc[aligned_idx],
+            n_features=X_val.shape[1],
+        )
         record = {
             "Ticker": ticker,
             "Model": name,
