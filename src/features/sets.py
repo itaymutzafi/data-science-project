@@ -11,7 +11,7 @@ TIME_FEATURES = ['Day_sin', 'Day_cos', 'Month_sin', 'Month_cos']
 RETURN_FEATURES = ['Return', 'Log_Return']
 VOL_FEATURE = [f"Vol{win}" for win in VOLATILITY_WINDOWS]
 MA_FEATURES = [f"MA{win}" for win in FEATURE_WINDOWS]
-MOMENTUM_FEATURES = ['MACD', 'MACD_Signal', 'MACD_Hist']
+MOMENTUM_FEATURES = ['MACD', 'MACD_Signal', 'MACD_Hist', 'Regime_Bull']
 PEER_FEATURES = {
     "AAPL" : ['MSFT - Close', 'MSFT - Volume', 'MSFT - Log_Return', 
               'AMZN - Close', 'AMZN - Volume', 'AMZN - Log_Return', 
