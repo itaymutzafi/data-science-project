@@ -17,9 +17,18 @@ from src.config import (
     LEGACY_RAW_PRICE_DIR,
     RAW_PRICE_DIR,
     TICKERS,
+    WARMUP_START_DATE,
+    START_DATE,
+    END_DATE
 )
 from src.utils.feature_names import canonicalize_feature_columns
 
+def fetch_wide_data() -> Dict[str, pd.DataFrame]:
+    """
+    Fetch price data from WARMUP_START_DATE to END_DATE.
+    Single source for feature engineering and Prophet - ensures MA200 etc. have warmup.
+    """
+    return fetch_data_for_eda(WARMUP_START_DATE, END_DATE)
 
 def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
     """
@@ -205,3 +214,13 @@ def load_stock_data(path: Union[str, Path]) -> pd.DataFrame:
         df.index = df.index.tz_localize(None)
         
     return df
+
+def filter_to_model_range(data: Dict[str, pd.DataFrame],
+    model_start: date = None,
+    ) -> Dict[str, pd.DataFrame]:
+    """
+    Keep only rows from model_start onwards. Use after feature engineering.
+    """
+    model_start = model_start or START_DATE
+    cutoff = pd.Timestamp(model_start)
+    return {t: df.loc[df.index >= cutoff].copy() for t, df in data.items()}

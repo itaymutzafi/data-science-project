@@ -15,6 +15,7 @@ from .targets import experiment_create_target_variable
 from .prophet import prophet
 from .rsi import add_rsi_feature
 from .interactions import add_confluence_features
+from .bear_and_bull import bull_and_bear_check_window_size, evaluate_regime_thresholds, make_regime_features
 
 __all__ = [
     "display_demo_sentiment",
@@ -68,5 +69,8 @@ __all__ = [
     "experiment_create_target_variable",
     "prophet",
     "add_rsi_feature",
-    "add_confluence_features"
+    "add_confluence_features",
+    "bull_and_bear_check_window_size",
+    "evaluate_regime_thresholds",
+    "make_regime_features"
 ]
