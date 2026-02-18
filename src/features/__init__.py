@@ -3,7 +3,7 @@ from .sentiment_analysis import display_demo_sentiment, generate_daily_sentiment
     plot_sentiment_coverage_heatmap, plot_rolling_sentiment_correlation, plot_sentiment_trends, plot_day_sentiment_breakdown
 from .day_month import add_day_month_features, preprocess_day_feature, preprocess_month_feature
 from .log_return import add_return_features, return_day_boxplot, test_return_seasonality
-from .volatility import add_volatility_features, volatility_comparison_plot
+from .volatility import add_volatility_features, volatility_comparison_plot, test_volatility_seasonality
 from .moving_average import add_ma_features, add_macd_feature, ma_plot, macd_plot, add_ma_distance_features
 from .reports import reports
 from .plots import avg_attr_by_time_plot, date_groupby_line_plot, articles_over_time_by_dataset_plot, article_volume_per_company_plot, \
@@ -38,6 +38,7 @@ __all__ = [
     "test_return_seasonality",
     "add_volatility_features",
     "volatility_comparison_plot",
+    "test_volatility_seasonality",
     "add_ma_features",
     "add_macd_feature",
     "ma_plot",

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, List
 
 from src.config import COMPANY_COLORS, VOLATILITY_WINDOWS, OUTLIER_THRESHOLD
+from src.utils import statistic_tests as st
 import seaborn as sns
 
 
@@ -66,3 +67,21 @@ def volatility_comparison_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[
         sns.despine()
         plt.tight_layout()
         plt.show()
+
+
+def test_volatility_seasonality(dfs: Dict[str, pd.DataFrame], vol_col: str = "Vol20") -> None:
+    """Seasonality significance test for volatility, same approach as return seasonality."""
+    day_results = {}
+    month_results = {}
+
+    for name, df in dfs.items():
+        if vol_col in df.columns:
+            day_results[name] = st.test_seasonality(df, vol_col, 'Day')
+            month_results[name] = st.test_seasonality(df, vol_col, 'Month')
+
+    if day_results:
+        st.plot_all_tickers_seasonality(day_results, "Day", COMPANY_COLORS, feature_name="Volatility")
+    if month_results:
+        st.plot_all_tickers_seasonality(month_results, "Month", COMPANY_COLORS, feature_name="Volatility")
+    if day_results or month_results:
+        st.seasonality_summary_table(day_results, month_results)

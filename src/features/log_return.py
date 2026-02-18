@@ -56,8 +56,17 @@ def return_day_boxplot(dfs: Dict[str, pd.DataFrame]) -> None:
         plt.show()
 
 def test_return_seasonality(dfs: Dict[str, pd.DataFrame]) -> None:
+    day_results = {}
+    month_results = {}
+
     for name, df in dfs.items():
         if 'Return' in df.columns:
-            print(f"========= Checking {name} =========")
-            st.display_seasonality_results(st.test_seasonality(df, 'Return', 'Day'))
-            st.display_seasonality_results(st.test_seasonality(df, 'Return', 'Month'))
+            day_results[name] = st.test_seasonality(df, 'Return', 'Day')
+            month_results[name] = st.test_seasonality(df, 'Return', 'Month')
+
+    if day_results:
+        st.plot_all_tickers_seasonality(day_results, "Day", COMPANY_COLORS)
+    if month_results:
+        st.plot_all_tickers_seasonality(month_results, "Month", COMPANY_COLORS)
+    if day_results or month_results:
+        st.seasonality_summary_table(day_results, month_results)
