@@ -22,6 +22,7 @@ from .feature_selection import run_feature_selection, feature_selection_plot, ge
     get_embedding_importance_features, get_experimet_lr_best_features, build_block_count_df, plot_block_usage_stacked, \
     get_subset_results, get_best_accuracy_feature_selection, plot_accuracy_by_strategy, run_forward_selection_per_fold, \
     plot_forward_selection_per_fold
+from .bear_and_bull_models import run_bull_only_cv, run_bull_only, summarize_bull_only
 
 __all__ = [
     "baselines",
@@ -59,5 +60,8 @@ __all__ = [
     "get_best_accuracy_feature_selection",
     "plot_accuracy_by_strategy",
     "run_forward_selection_per_fold",
-    "plot_forward_selection_per_fold"
+    "plot_forward_selection_per_fold",
+    "run_bull_only_cv",
+    "run_bull_only",
+    "summarize_bull_only"
 ]

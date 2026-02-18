@@ -53,7 +53,8 @@ TICKERS = list(TICKER_TO_COMPANY_MAP.keys())
 DAYNAMES = list(day_name)
 MONTHNAMES = list(month_name)[1:]
 START_DATE = date(2020, 1, 1)
-WARMUP_START_DATE = date(2019, 1, 1)
+# Warm-up for Window features in order to avoid Nulls.
+WARMUP_START_DATE = START_DATE.replace(year=START_DATE.year - 1)
 END_DATE = date(2025, 12, 3)
 
 # Features
