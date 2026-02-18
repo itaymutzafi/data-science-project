@@ -5,8 +5,10 @@
 #   3. Drop constant / regime columns that are uninformative in the bull-only subset.
 #   4. Run walk-forward CV on the filtered bull-only data with a given feature set per ticker.
 
+import json
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from typing import Dict, List, Optional
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
@@ -22,6 +24,37 @@ DEFAULT_CLASSIFIERS = ["LogisticRegression", "RandomForestClassifier", "XGBClass
 
 # Columns that are constant or meaningless inside the bull-only subset
 _BULL_ONLY_DROP_COLS = {"Regime_Bull", "Regime_Strength"}
+
+_BULL_RESULTS_FILENAME = "bull_only_cv_results.parquet"
+
+
+def _get_bull_cache_path() -> Path:
+    cache_dir = Path(config.BULL_RESULTS_CACHE_DIR)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / _BULL_RESULTS_FILENAME
+
+
+def _load_bull_cache() -> pd.DataFrame:
+    cache_path = _get_bull_cache_path()
+    if not cache_path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_parquet(cache_path)
+        if "Features" in df.columns:
+            df["Features"] = df["Features"].apply(json.loads)
+        return df
+    except Exception as exc:
+        print(f"Warning: failed to load bull results cache: {exc}")
+        return pd.DataFrame()
+
+
+def _save_bull_cache(df: pd.DataFrame) -> None:
+    cache_path = _get_bull_cache_path()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    save_df = df.copy()
+    if "Features" in save_df.columns:
+        save_df["Features"] = save_df["Features"].apply(json.dumps)
+    save_df.to_parquet(cache_path, index=False)
 
 
 def _prepare_bull_data(
@@ -274,8 +307,16 @@ def summarize_bull_only(results: pd.DataFrame) -> tuple:
     return summary, best_per_ticker
 
 
-def run_bull_only(feature_data: Dict[str, pd.DataFrame]) -> tuple:
+def run_bull_only(feature_data: Dict[str, pd.DataFrame], *, force_refresh: bool = False) -> tuple:
     """Run bull-only CV with all Section 6.2 strategies and default classifiers.
+
+    Parameters
+    ----------
+    feature_data : dict
+        {ticker: full DataFrame} — must still contain Regime_Bull and Close.
+    force_refresh : bool
+        If False (default), returns cached results when available.
+        If True, recomputes from scratch and updates the cache.
 
     Returns
     -------
@@ -286,6 +327,13 @@ def run_bull_only(feature_data: Dict[str, pd.DataFrame]) -> tuple:
     best_per_ticker : pd.DataFrame or None
         Best Strategy+Model row per Ticker.
     """
+    if not force_refresh:
+        cached = _load_bull_cache()
+        if not cached.empty:
+            print("Successfully loaded cached bull-only CV results.")
+            summary, best_per_ticker = summarize_bull_only(cached)
+            return cached, summary, best_per_ticker
+
     feature_strategies = _build_feature_strategies()
 
     results = run_bull_only_cv(
@@ -299,5 +347,6 @@ def run_bull_only(feature_data: Dict[str, pd.DataFrame]) -> tuple:
         print("No results produced.")
         return results, None, None
 
+    _save_bull_cache(results)
     summary, best_per_ticker = summarize_bull_only(results)
     return results, summary, best_per_ticker

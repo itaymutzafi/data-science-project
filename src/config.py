@@ -20,6 +20,7 @@ MARKET_CACHE_DIR = CACHE_DIR / "market"
 PROPHET_CACHE_DIR = CACHE_DIR / "prophet"
 SEC_FILINGS_CACHE_DIR = CACHE_DIR / "sec_filings"
 SENTIMENT_CACHE_DIR = CACHE_DIR / "sentiment"
+BULL_RESULTS_CACHE_DIR = CACHE_DIR / "bull_results"
 
 # Price & auxiliary caches (primary)
 RAW_PRICE_DIR = PRICE_CACHE_DIR
