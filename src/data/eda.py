@@ -62,3 +62,28 @@ def stock_split_table(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     out = pd.DataFrame(rows).sort_values(["Date", "Ticker"])
     return out.reset_index(drop=True)
+
+
+def correlation_breakdown_plot(df: pd.DataFrame) -> None:
+    _, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    pairs = [
+        ("Close", "Open vs Close"),
+        ("High", "Open vs High"),
+        ("Low", "Open vs Low"),
+    ]
+
+    for ax, (col, title) in zip(axes, pairs):
+        ax.scatter(df["Open"], df[col], s=10)
+
+        min_val = min(df["Open"].min(), df[col].min())
+        max_val = max(df["Open"].max(), df[col].max())
+        ax.plot([min_val, max_val], [min_val, max_val])
+
+        ax.set_xlabel("Open")
+        ax.set_ylabel(col)
+        ax.set_title(title)
+        ax.grid(alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
