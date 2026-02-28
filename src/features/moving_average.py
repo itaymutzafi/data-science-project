@@ -5,6 +5,7 @@ from typing import Dict, List
 
 from src.config import COMPANY_COLORS, FEATURE_WINDOWS
 
+
 def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> None:
     """
     Adds Moving Average features to the dataframe.
@@ -56,6 +57,7 @@ def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = 
         count += 1
     print(f" -> Success: Distances added to {count} tickers.")
 
+
 def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
     added = []
     fast = 12
@@ -78,6 +80,7 @@ def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
             added.append(name)
 
     print(f"{added}: Added MACD feature")
+
 
 def ma_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = FEATURE_WINDOWS) -> None:
     """
@@ -130,6 +133,7 @@ def ma_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = FEATURE_WIND
 
     plt.tight_layout()
     plt.show()
+
 
 def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
     plt.figure(figsize=(13, 5))

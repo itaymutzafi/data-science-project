@@ -14,12 +14,11 @@ def add_return_features(dfs: Dict[str, pd.DataFrame]) -> None:
     for name, df in dfs.items():
         if "Close" in df.columns:
             df['Return'] = df['Close'].pct_change()
-
             df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
-
             added.append(name)
 
     print(f"{added}: Added Return and Log Return features")
+
 
 def return_day_boxplot(dfs: Dict[str, pd.DataFrame]) -> None:  
     if all('Return' in df.columns for df in dfs.values()):    
@@ -54,6 +53,7 @@ def return_day_boxplot(dfs: Dict[str, pd.DataFrame]) -> None:
         ax.legend(handles=legend_elements, loc='upper right')
         plt.tight_layout()
         plt.show()
+
 
 def test_return_seasonality(dfs: Dict[str, pd.DataFrame]) -> None:
     day_results = {}

@@ -1,23 +1,24 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Dict, List
+import seaborn as sns
 
 from src.config import COMPANY_COLORS, VOLATILITY_WINDOWS, OUTLIER_THRESHOLD
 from src.utils import statistic_tests as st
-import seaborn as sns
 
 
-def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = VOLATILITY_WINDOWS) -> None:
+def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = VOLATILITY_WINDOWS) -> List[str]:
     """
     Adds Volatility features (Standard Deviation of Returns).
     Handles outliers by capping at OUTLIER_THRESHOLD * STD.
     """
     added = []
+    col_names = [f"Vol{win}" for win in windows]
     
     for name, df in dfs.items():
         if "Return" in df.columns:
-            for win in windows:
-                col_name = f"Vol{win}"
+            for idx, win in enumerate(windows):
+                col_name = col_names[idx]
                 
                 # Calculate rolling std
                 vol_series = df['Return'].rolling(window=win).std()
@@ -38,6 +39,8 @@ def add_volatility_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = V
 
     print(f"Added Volatility features: {windows} for {len(added)} stocks.")
     print(f"Note: Outliers capped at {OUTLIER_THRESHOLD} sigma.")
+
+    return col_names
 
 def volatility_comparison_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = VOLATILITY_WINDOWS) -> None:
     """

@@ -29,6 +29,7 @@ def add_peer_stock_features(dfs: Dict[str, pd.DataFrame], columns_to_merge: List
 
     print(f"{added}: Added Peer Stock feature")
 
+
 def save_merged_df_to_file(df: pd.DataFrame, ticker_name: str) -> None:
     project_root = Path(__file__).resolve().parents[2]
     cache_dir = project_root / "data" / "raw"
@@ -38,6 +39,7 @@ def save_merged_df_to_file(df: pd.DataFrame, ticker_name: str) -> None:
     
     df.to_parquet(cache_path)
     print(f"Merged data saved to: {cache_path}")
+
 
 def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: Dict[str, pd.DataFrame], columns: List[str]) -> pd.DataFrame:
     res_df = main_df.copy()
@@ -66,6 +68,7 @@ def merge_df_by_date(ticker_name: str, main_df: pd.DataFrame, other_companies: D
        
     return res_df
 
+
 def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: str) -> None:
     other_tickers = [t for t in TICKERS if t != ticker]
     others_cols = [canonicalize_feature_name(f"{t} - {column}") for t in other_tickers]
@@ -75,6 +78,7 @@ def peer_stock_correlation(dfs: Dict[str, pd.DataFrame], ticker: str, column: st
     sns.heatmap(corr_df, annot=True, cmap="coolwarm", fmt=".2f")
     plt.title(f"Correlation Between {ticker} and peer stock - {column}")
     plt.show()
+
 
 def add_auxiliary_features(
     dfs: Dict[str, pd.DataFrame],
