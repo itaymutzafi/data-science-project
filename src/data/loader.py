@@ -5,32 +5,16 @@ and local file I/O operations (CSV, Parquet).
 """
 from datetime import date
 from pathlib import Path
-from typing import Union, Dict
+from typing import Dict
 import pandas as pd
 import yfinance as yf
-from yfinance import Ticker
 
-from src.config import (
-    AUX_DATA_PATH,
-    AUX_TICKER_MAP,
-    LEGACY_AUX_DATA_PATH,
-    LEGACY_RAW_PRICE_DIR,
-    RAW_PRICE_DIR,
-    TICKERS,
-    WARMUP_START_DATE,
-    START_DATE,
-    END_DATE
-)
+from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, LEGACY_AUX_DATA_PATH, LEGACY_RAW_PRICE_DIR, \
+    RAW_PRICE_DIR, TICKERS, START_DATE, DAYS_IN_YEAR
 from src.utils.feature_names import canonicalize_feature_columns
 
-def fetch_wide_data() -> Dict[str, pd.DataFrame]:
-    """
-    Fetch price data from WARMUP_START_DATE to END_DATE.
-    Single source for feature engineering and Prophet - ensures MA200 etc. have warmup.
-    """
-    return fetch_data_for_eda(WARMUP_START_DATE, END_DATE)
 
-def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: str = "5y", save_file: bool = True) -> pd.DataFrame:
+def fetch_sample_data(ticker: yf.Ticker, start_time: date, end_time: date, save_file: bool = True) -> pd.DataFrame:
     """
     Fetches raw OHLCV data for initial research and stationarity tests.
     Implements local caching to avoid repeated API calls.
@@ -69,11 +53,11 @@ def fetch_sample_data(ticker: Ticker, start_time: date, end_time: date, period: 
             return df
         else:
             # Need to fetch new data - calculate years
-            years_diff = (end_time - start_time).days / 365.25
+            years_diff = (end_time - start_time).days / DAYS_IN_YEAR
             print(f"Cache doesn't cover requested range. Fetching {years_diff:.1f} year(s) of data for {ticker_name} from yfinance...")
     else:
         # No cache exists - calculate years
-        years_diff = (end_time - start_time).days / 365.25
+        years_diff = (end_time - start_time).days / DAYS_IN_YEAR
         print(f"Fetching {years_diff:.1f} year(s) of data for {ticker_name} from yfinance...")
         
     # Download data with fallback
@@ -194,33 +178,11 @@ def fetch_data_for_eda(start_time: date, end_time: date) -> Dict[str, pd.DataFra
     return stocks_data
 
 
-def load_stock_data(path: Union[str, Path]) -> pd.DataFrame:
-    """
-    Loads stock data from a Parquet file, ensuring the index is a timezone-naive DatetimeIndex.
-    """
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Stock data file not found at: {path}")
-    
-    print(f"Loading stock data from {path}...")
-    df = pd.read_parquet(path)
-    
-    # Ensure index is DatetimeIndex
-    if not isinstance(df.index, pd.DatetimeIndex):
-        df.index = pd.to_datetime(df.index)
-            
-    # Remove timezone information if present
-    if df.index.tz is not None:
-        df.index = df.index.tz_localize(None)
-        
-    return df
-
 def filter_to_model_range(data: Dict[str, pd.DataFrame],
-    model_start: date = None,
+    model_start: date = START_DATE,
     ) -> Dict[str, pd.DataFrame]:
     """
     Keep only rows from model_start onwards. Use after feature engineering.
     """
-    model_start = model_start or START_DATE
     cutoff = pd.Timestamp(model_start)
     return {t: df.loc[df.index >= cutoff].copy() for t, df in data.items()}

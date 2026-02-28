@@ -47,6 +47,7 @@ OUTPUT_FIELDS = [
     "url",
 ]
 
+
 def extract_date(row: dict[str, Any]) -> Optional[date]:
     """Return a date object from row['date'], or None if invalid."""
     s = row.get("date")
@@ -56,11 +57,13 @@ def extract_date(row: dict[str, Any]) -> Optional[date]:
     except Exception:
         return None
 
+
 def detect_company(text_lower: str) -> Optional[str]:
     for ticker, company in TICKER_TO_COMPANY_MAP.items():
         if any(k in text_lower for k in [ticker.lower(), company.lower()]):
             return company
     return None
+
 
 def parse_extra_fields(row: dict[str, Any]) -> dict:
     """
@@ -94,6 +97,7 @@ def parse_extra_fields(row: dict[str, Any]) -> dict:
     }
 
     return result
+
 
 def main():
     ds = load_dataset(DATASET, split="train", data_files=DATA_FILES, streaming=True)
@@ -156,8 +160,10 @@ def main():
     #     group.to_parquet(filename, index=False)
     #     print(f"Saved {filename} with {len(group)} rows")
 
+
 if __name__ == "__main__":
     main()
+
 
 # Util
 def get_news_df_from_file(file_path: Union[str, Path]) -> pd.DataFrame:
@@ -172,6 +178,7 @@ def get_news_df_from_file(file_path: Union[str, Path]) -> pd.DataFrame:
         df = pd.read_parquet(path_obj)
     df["date"] = pd.to_datetime(df["date"])
     return df
+
 
 # From previous source Google News
 def get_google_news_titles(query: str, days: int) -> pd.DataFrame:

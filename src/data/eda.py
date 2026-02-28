@@ -6,6 +6,7 @@ from typing import Dict
 from src.config import COMPANY_COLORS
 from src.evaluation.plots import set_style
 
+
 def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: str, is_scatter: bool) -> None:
     set_style()
     for name, df in dfs.items():
@@ -30,6 +31,7 @@ def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: st
     plt.tight_layout()
     plt.show()
 
+
 def eda_correlation(ticker_name: str, df, corr_method: str='pearson') -> None:
     set_style()
     corr_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'] 
@@ -40,6 +42,7 @@ def eda_correlation(ticker_name: str, df, corr_method: str='pearson') -> None:
         plt.title(f"{corr_method} Correlation: {ticker_name}")
         plt.tight_layout() 
         plt.show()
+
 
 def stock_split_table(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     set_style()

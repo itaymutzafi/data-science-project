@@ -7,10 +7,9 @@ Strict validation can be enabled explicitly for deeper schema checks.
 from __future__ import annotations
 
 import json
+import pandas as pd
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
-
-import pandas as pd
 
 
 SCHEMA_DIR = Path(__file__).parent / "schemas"
@@ -21,10 +20,12 @@ def load_schema(json_name: str) -> Dict[str, Any]:
     """Load schema file from the canonical schema directory with legacy fallback."""
     schema_file = Path(json_name).name
     candidates = [SCHEMA_DIR / schema_file, LEGACY_SCHEMA_DIR / schema_file]
+
     for schema_path in candidates:
         if schema_path.exists():
             with open(schema_path, "r", encoding="utf-8") as f:
                 return json.load(f)
+            
     raise FileNotFoundError(
         f"Schema '{schema_file}' was not found in {SCHEMA_DIR} or {LEGACY_SCHEMA_DIR}."
     )

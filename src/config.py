@@ -57,6 +57,7 @@ START_DATE = date(2020, 1, 1)
 # Warm-up for Window features in order to avoid Nulls.
 WARMUP_START_DATE = START_DATE.replace(year=START_DATE.year - 1)
 END_DATE = date(2025, 12, 3)
+DAYS_IN_YEAR = 365.25
 
 # Features
 AUX_TICKER_MAP = {
