@@ -233,40 +233,6 @@ def run_bull_only_cv(
     return pd.DataFrame(all_results)
 
 
-def _build_feature_strategies() -> Dict[str, Dict[str, List[str]]]:
-    """Best feature sets per strategy from Section 6.2."""
-    top_experiment = {
-        "AAPL": ["Close", "MACD", "Stock Splits", "NVDA_Leader"],
-        "AMZN": ["Close", "Dist_MA20", "Day_cos", "Regime_Bull", "Days_To_Nearest_Report"],
-        "GOOG": ["Close", "Trend_x_RSI", "Treasury_10Y", "Dividends", "MA200", "MA20"],
-        "MSFT": ["Close", "MACD", "Stock Splits", "NVDA_Leader"],
-    }
-    top_10_embedding = {
-        "AAPL": ["Days_To_Nearest_Report", "Open", "NVDA_Leader", "Nasdaq_100", "Peer_GOOG_Volume", "Peer_AMZN_Volume"],
-        "AMZN": ["Nasdaq_100", "Days_To_Nearest_Report", "Open", "Peer_AAPL_Close", "Treasury_10Y", "NVDA_Leader", "MA200", "Dist_MA50"],
-        "GOOG": ["Days_To_Nearest_Report", "Peer_AAPL_Close", "NVDA_Leader", "Volume", "Trend_x_RSI"],
-        "MSFT": ["Peer_AAPL_Close", "Peer_GOOG_Close", "Nasdaq_100", "RSI", "High", "Treasury_10Y"],
-    }
-    top_10_wrapper = {
-        "AAPL": ["Peer_AMZN_Volume", "sentiment_momentum_3d_lag1", "Dist_MA200", "MACD_x_RSI", "sentiment_std_lag1"],
-        "AMZN": ["sentiment_mean_lag1", "Dividends", "MACD_x_RSI", "Peer_MSFT_Log_Return", "Dist_MA50"],
-        "GOOG": ["sentiment_momentum_3d_lag1", "Peer_MSFT_Log_Return", "Dist_MA20", "sentiment_mean_lag1", "Month", "Stock Splits", "Vol20", "Return"],
-        "MSFT": ["Peer_AAPL_Log_Return", "sentiment_momentum_3d_lag1", "Peer_GOOG_Log_Return", "Month", "Stock Splits", "sentiment_std_lag1", "VIX_Gap", "sentiment_mean_lag1", "Peer_AMZN_Volume", "Sentiment_Score"],
-    }
-    all_strategy = {
-        "AAPL": ["Peer_AMZN_Volume", "sentiment_momentum_3d_lag1", "NVDA_Leader", "Open"],
-        "AMZN": ["Dist_MA20", "Dividends", "RSI", "sentiment_mean_lag1"],
-        "GOOG": ["Peer_MSFT_Log_Return", "Dist_MA20", "sentiment_momentum_3d_lag1"],
-        "MSFT": ["Peer_AAPL_Close", "MACD", "sentiment_momentum_3d_lag1", "NVDA_Leader"],
-    }
-    return {
-        "top_experiment": top_experiment,
-        "top_10_embedding": top_10_embedding,
-        "top_10_wrapper": top_10_wrapper,
-        "all": all_strategy,
-    }
-
-
 def summarize_bull_only(results: pd.DataFrame) -> tuple:
     """Build summary tables from bull-only CV results.
 
@@ -310,7 +276,7 @@ def summarize_bull_only(results: pd.DataFrame) -> tuple:
     return summary, best_per_ticker
 
  
-def run_bull_only(feature_data: Dict[str, pd.DataFrame], *, force_refresh: bool = False) -> tuple:
+def run_bull_only(feature_data: Dict[str, pd.DataFrame], feature_strategies, *, force_refresh: bool = False) -> tuple:
     """Run bull-only CV with all Section 6.2 strategies and default classifiers.
 
     Parameters
@@ -336,8 +302,6 @@ def run_bull_only(feature_data: Dict[str, pd.DataFrame], *, force_refresh: bool 
             print("Successfully loaded cached bull-only CV results.")
             summary, best_per_ticker = summarize_bull_only(cached)
             return cached, summary, best_per_ticker
-
-    feature_strategies = _build_feature_strategies()
 
     results = run_bull_only_cv(
         feature_data,
