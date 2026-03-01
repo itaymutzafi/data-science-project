@@ -1,17 +1,24 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Optional
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from itertools import combinations
 from collections import defaultdict
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
+from sklearn.base import clone
 import colorsys
 
 from src.models import run_binary_cls_with_feature_importance, run_binary_cls_embedded_importance
 from src.config import DEF_SPLITS, COMPANY_COLORS, SPLITS
-from src.features import build_feature_to_block_map
+from src.features import (
+    build_feature_to_block_map,
+    experiment_create_target_variable,
+    preprocess_day_feature,
+    preprocess_month_feature,
+)
 from src.utils.feature_names import canonicalize_feature_columns
 
 
@@ -846,3 +853,325 @@ def plot_forward_selection_per_fold(
         
         plt.show()
         plt.close()
+
+
+_EPISODE_SHORT_MAP = {
+    "COVID shock / panic repricing": "COVID",
+    "Reopening + liquidity-driven bull phase": "Reopen",
+    "Inflation shock + aggressive rate hikes": "Inflation/Rates",
+    "AI-led mega-cap rally with selective breadth": "AI-led",
+    "Late-cycle uncertainty / mixed macro signals": "Mixed",
+}
+
+
+def _macro_episode(date_like) -> str:
+    ts = pd.Timestamp(date_like)
+    if ts <= pd.Timestamp("2020-04-30"):
+        return "COVID shock / panic repricing"
+    if ts <= pd.Timestamp("2021-12-31"):
+        return "Reopening + liquidity-driven bull phase"
+    if ts <= pd.Timestamp("2022-12-31"):
+        return "Inflation shock + aggressive rate hikes"
+    if ts <= pd.Timestamp("2024-12-31"):
+        return "AI-led mega-cap rally with selective breadth"
+    return "Late-cycle uncertainty / mixed macro signals"
+
+
+def _regime_label(bull_share: float) -> str:
+    if pd.isna(bull_share):
+        return "Unavailable"
+    if bull_share >= 0.60:
+        return "Bull-dominant"
+    if bull_share <= 0.40:
+        return "Bear-dominant"
+    return "Mixed/Transition"
+
+
+def _scalar_stat(slice_df: pd.DataFrame, col: str, stat: str = "mean") -> float:
+    if col not in slice_df.columns:
+        return np.nan
+
+    obj = slice_df[col]
+    if isinstance(obj, pd.DataFrame):
+        ser = pd.to_numeric(obj.stack(dropna=False), errors="coerce")
+    else:
+        ser = pd.to_numeric(obj, errors="coerce")
+
+    if stat == "mean":
+        value = ser.mean()
+    elif stat == "std":
+        value = ser.std()
+    else:
+        raise ValueError(f"Unsupported stat: {stat}")
+
+    return float(value) if pd.notna(value) else np.nan
+
+
+def _prepare_binary_frame_for_fold_context(
+    df: pd.DataFrame,
+    feature_candidates: List[str],
+) -> tuple[pd.DataFrame, List[str], str]:
+    prepared = canonicalize_feature_columns(df.copy())
+    prepared = preprocess_day_feature(preprocess_month_feature(prepared))
+    if not isinstance(prepared.index, pd.DatetimeIndex):
+        prepared.index = pd.to_datetime(prepared.index)
+
+    prepared, target_col = experiment_create_target_variable(
+        prepared,
+        target_type="binary",
+        horizon=1,
+    )
+    # Protect against duplicated names after feature joins.
+    prepared = prepared.loc[:, ~prepared.columns.duplicated(keep="first")]
+
+    feature_cols = [c for c in feature_candidates if c in prepared.columns]
+    if not feature_cols:
+        fallback = [
+            "Close",
+            "Log_Return",
+            "MA20",
+            "MA50",
+            "MA200",
+            "RSI",
+            "VIX_Index",
+            "Nasdaq_100",
+        ]
+        feature_cols = [c for c in fallback if c in prepared.columns]
+
+    required = list(feature_cols) + [target_col]
+    if "Regime_Bull" in prepared.columns:
+        required.append("Regime_Bull")
+    if "Log_Return" in prepared.columns:
+        required.append("Log_Return")
+    required = list(dict.fromkeys(required))
+
+    prepared = prepared[required].dropna().sort_index()
+    return prepared, feature_cols, target_col
+
+
+def run_fold_regime_context_analysis(
+    dfs: Dict[str, pd.DataFrame],
+    *,
+    candidate_features_map: Optional[Dict[str, List[str]]] = None,
+    n_splits: int = DEF_SPLITS,
+    model: Optional[LogisticRegression] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build per-fold diagnostic tables that link validation accuracy to regime context.
+
+    Returns:
+        fold_context_df:
+            Detailed per-ticker/per-fold table.
+        fold_context_summary_df:
+            Per-ticker summary with mean and dispersion statistics.
+    """
+    candidate_features_map = candidate_features_map or {}
+    model = model or LogisticRegression(max_iter=2000, random_state=42)
+
+    rows: List[Dict] = []
+
+    for ticker, df_ticker in dfs.items():
+        candidate_features = candidate_features_map.get(ticker, [])
+        prepared_df, use_features, target_col = _prepare_binary_frame_for_fold_context(
+            df_ticker,
+            candidate_features,
+        )
+
+        if len(prepared_df) <= n_splits or not use_features:
+            continue
+
+        X = prepared_df[use_features]
+        y = prepared_df[target_col].astype(int)
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+
+        for fold_idx, (train_idx, val_idx) in enumerate(tscv.split(X), start=1):
+            X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+            y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_val_scaled = scaler.transform(X_val)
+
+            model_fold = clone(model)
+            model_fold.fit(X_train_scaled, y_train)
+            preds = model_fold.predict(X_val_scaled)
+            accuracy = float((preds == y_val.values).mean())
+
+            train_slice = prepared_df.iloc[train_idx]
+            val_slice = prepared_df.iloc[val_idx]
+
+            train_bull_share = _scalar_stat(train_slice, "Regime_Bull", stat="mean")
+            val_bull_share = _scalar_stat(val_slice, "Regime_Bull", stat="mean")
+            regime_shift_abs = (
+                abs(train_bull_share - val_bull_share)
+                if pd.notna(train_bull_share) and pd.notna(val_bull_share)
+                else np.nan
+            )
+            val_logret_std = _scalar_stat(val_slice, "Log_Return", stat="std")
+
+            macro_episode = _macro_episode(val_slice.index.min())
+            rows.append(
+                {
+                    "Ticker": ticker,
+                    "Fold": fold_idx,
+                    "Accuracy": round(accuracy, 4),
+                    "TrainStart": train_slice.index.min().date(),
+                    "TrainEnd": train_slice.index.max().date(),
+                    "ValStart": val_slice.index.min().date(),
+                    "ValEnd": val_slice.index.max().date(),
+                    "MacroEpisode": macro_episode,
+                    "EpisodeShort": _EPISODE_SHORT_MAP.get(macro_episode, "Other"),
+                    "TrainBullShare": round(train_bull_share, 3) if pd.notna(train_bull_share) else np.nan,
+                    "ValBullShare": round(val_bull_share, 3) if pd.notna(val_bull_share) else np.nan,
+                    "ValRegime": _regime_label(val_bull_share),
+                    "RegimeShiftAbs": round(regime_shift_abs, 3) if pd.notna(regime_shift_abs) else np.nan,
+                    "ValLogRetStd": round(val_logret_std, 5) if pd.notna(val_logret_std) else np.nan,
+                    "NumFeatures": len(use_features),
+                }
+            )
+
+    detailed_cols = [
+        "Ticker",
+        "Fold",
+        "Accuracy",
+        "TrainStart",
+        "TrainEnd",
+        "ValStart",
+        "ValEnd",
+        "MacroEpisode",
+        "EpisodeShort",
+        "TrainBullShare",
+        "ValBullShare",
+        "ValRegime",
+        "RegimeShiftAbs",
+        "ValLogRetStd",
+        "NumFeatures",
+    ]
+    summary_cols = [
+        "Ticker",
+        "MeanAccuracy",
+        "StdAccuracy",
+        "MeanRegimeShift",
+        "MeanValVolatility",
+    ]
+
+    if not rows:
+        return (
+            pd.DataFrame(columns=detailed_cols),
+            pd.DataFrame(columns=summary_cols),
+        )
+
+    fold_context_df = pd.DataFrame(rows).sort_values(["Ticker", "Fold"]).reset_index(drop=True)
+    fold_context_summary_df = (
+        fold_context_df.groupby("Ticker", as_index=False)
+        .agg(
+            MeanAccuracy=("Accuracy", "mean"),
+            StdAccuracy=("Accuracy", "std"),
+            MeanRegimeShift=("RegimeShiftAbs", "mean"),
+            MeanValVolatility=("ValLogRetStd", "mean"),
+        )
+        .sort_values("Ticker")
+        .reset_index(drop=True)
+    )
+
+    return fold_context_df, fold_context_summary_df
+
+
+def build_fold_regime_context_compact_table(fold_context_df: pd.DataFrame) -> pd.DataFrame:
+    """Return a compact reader-facing subset of the fold-context table."""
+    compact_cols = [
+        "Ticker",
+        "Fold",
+        "Accuracy",
+        "ValStart",
+        "ValEnd",
+        "EpisodeShort",
+        "ValRegime",
+        "RegimeShiftAbs",
+    ]
+    if fold_context_df.empty:
+        return pd.DataFrame(columns=compact_cols)
+    return fold_context_df[compact_cols].copy()
+
+
+def display_fold_regime_context_tables(
+    fold_context_df: pd.DataFrame,
+    fold_context_summary_df: pd.DataFrame,
+) -> None:
+    """Display compact fold table and per-ticker summary in notebook-friendly format."""
+    compact_df = build_fold_regime_context_compact_table(fold_context_df)
+
+    print("Fold-level diagnostics (5-fold walk-forward):")
+    try:
+        from IPython.display import display  # type: ignore
+
+        display(compact_df)
+        print("Per-ticker aggregate diagnostics:")
+        display(fold_context_summary_df.round(4))
+    except ImportError:
+        print(compact_df.to_string(index=False))
+        print("Per-ticker aggregate diagnostics:")
+        print(fold_context_summary_df.round(4).to_string(index=False))
+
+
+def plot_fold_regime_context(fold_context_df: pd.DataFrame) -> None:
+    """
+    Plot fold diagnostics:
+    1) Heatmap of validation accuracy by ticker x fold.
+    2) Unified line chart for all tickers with project-standard colors.
+    """
+    if fold_context_df.empty:
+        print("No fold-context rows were produced; skipping plots.")
+        return
+
+    acc_matrix = (
+        fold_context_df.pivot(index="Ticker", columns="Fold", values="Accuracy").sort_index()
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 3.5))
+    im = ax.imshow(acc_matrix.values, cmap="YlGnBu", aspect="auto")
+
+    for i in range(acc_matrix.shape[0]):
+        for j in range(acc_matrix.shape[1]):
+            value = acc_matrix.values[i, j]
+            if pd.notna(value):
+                ax.text(j, i, f"{value:.3f}", ha="center", va="center", fontsize=9)
+
+    ax.set_xticks(range(acc_matrix.shape[1]))
+    ax.set_xticklabels([f"Fold {fold}" for fold in acc_matrix.columns])
+    ax.set_yticks(range(acc_matrix.shape[0]))
+    ax.set_yticklabels(acc_matrix.index)
+    ax.set_title("Validation Accuracy by Ticker and Fold")
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    plt.tight_layout()
+    plt.show()
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+
+    y_min = max(0.0, fold_context_df["Accuracy"].min() - 0.03)
+    y_max = min(1.0, fold_context_df["Accuracy"].max() + 0.03)
+    xticks = sorted(fold_context_df["Fold"].unique())
+
+    for ticker in sorted(fold_context_df["Ticker"].unique()):
+        sub = fold_context_df[fold_context_df["Ticker"] == ticker].sort_values("Fold")
+        color = COMPANY_COLORS.get(ticker, "#333333")
+        ax.plot(
+            sub["Fold"],
+            sub["Accuracy"],
+            marker="o",
+            linewidth=2,
+            color=color,
+            label=ticker,
+        )
+
+    ax.set_title("Validation Accuracy Across Folds by Ticker")
+    ax.set_xlabel("Fold")
+    ax.set_ylabel("Validation Accuracy")
+    ax.set_ylim(y_min, y_max)
+    ax.set_xticks(xticks)
+    ax.grid(alpha=0.3)
+    ax.legend(title="Ticker")
+    plt.tight_layout()
+    plt.show()
+    plt.close()

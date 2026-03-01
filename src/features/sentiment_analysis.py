@@ -33,6 +33,7 @@ from src.config import (
 from src.data.news_loader import get_google_news_titles, get_news_df_from_file
 from src.utils import set_style, apply_academic_style
 from transformers.utils import logging as hf_logging
+from pandas.errors import EmptyDataError, ParserError
 
 # Sentiment Analysis Configuration
 # Note: Feature options are now handled in src.features.sets
@@ -456,9 +457,30 @@ def generate_daily_sentiment_features(
     if not force_compute:
         for candidate in cache_candidates:
             if candidate.exists():
+                try:
+                    if candidate.stat().st_size == 0:
+                        logger.warning(f"Skipping empty sentiment cache: {candidate}")
+                        continue
+                except OSError as exc:
+                    logger.warning(f"Skipping unreadable sentiment cache metadata ({candidate}): {exc}")
+                    continue
+
                 logger.info(f"Loading cached sentiment: {candidate}")
-                df = pd.read_csv(candidate)
-                df['date'] = pd.to_datetime(df['date'])
+                try:
+                    df = pd.read_csv(candidate)
+                except (EmptyDataError, ParserError, UnicodeDecodeError, OSError, ValueError) as exc:
+                    logger.warning(f"Skipping invalid sentiment cache ({candidate}): {exc}")
+                    continue
+
+                if 'date' not in df.columns:
+                    logger.warning(f"Skipping sentiment cache without 'date' column: {candidate}")
+                    continue
+
+                try:
+                    df['date'] = pd.to_datetime(df['date'])
+                except Exception as exc:
+                    logger.warning(f"Skipping sentiment cache with invalid date column ({candidate}): {exc}")
+                    continue
 
                 # One-time migration from legacy cache to primary layout.
                 if candidate != cache_path:
@@ -526,7 +548,9 @@ def generate_daily_sentiment_features(
     
     if cache_path:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        final_df.to_csv(cache_path, index=False)
+        tmp_cache_path = cache_path.with_suffix(f"{cache_path.suffix}.tmp")
+        final_df.to_csv(tmp_cache_path, index=False)
+        tmp_cache_path.replace(cache_path)
         
     return final_df
 
