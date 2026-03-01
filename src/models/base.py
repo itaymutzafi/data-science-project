@@ -1,10 +1,11 @@
 """Abstract base class for all models in the project."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Union
+from typing import Union
 import pandas as pd
 import joblib
 from pathlib import Path
+
 
 class BaseModel(ABC):
     """

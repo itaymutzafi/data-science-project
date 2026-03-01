@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.svm import SVR
+
 from . import baselines
 from . import advanced
 from src.config import SEED
@@ -135,32 +136,3 @@ def get_model(name: str, input_size: Optional[int] = None, **kwargs) -> Any:
 
     else:
         raise ValueError(f"Unknown model name: {name}")
-
-
-def list_available_models() -> List[str]:
-    """Returns a list of all registered model names.
-
-    Returns:
-        List[str]: List of valid model identifiers.
-    """
-    return [
-        "NaiveBaseline",
-        "RandomBaseline",
-        "MarketBenchmark",
-        "CAPMBaseline",
-        "ClassificationBaselineRandom",
-        "ClassificationBaselineZero",
-        "ClassificationBaselineOne",
-        "ClassificationBaselineMajor",
-        "Ridge",
-        "SVR",
-        "RandomForest",
-        "RandomForestClassifier",
-        "LogisticRegression",
-        "XGBRegressor",
-        "XGBClassifier",
-        "LSTM",
-        "RandomForest_Deep",
-        "XGB_Conservative",
-        "XGB_Aggressive"
-    ]

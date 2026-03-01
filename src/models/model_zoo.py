@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional
-
 import pandas as pd
 
 from src import config as project_config
@@ -19,7 +18,6 @@ from src.features import (
     preprocess_month_feature,
 )
 from src.utils.feature_names import canonicalize_feature_columns
-
 from .experiment import ExperimentConfig, ExperimentRunner
 
 DEFAULT_SEARCH_BUDGET = 1.0
