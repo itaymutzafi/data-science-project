@@ -4,18 +4,13 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Tuple
-
+from typing import Dict, Iterable, List, Optional
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
 from src.evaluation.metrics import evaluate_regression
-from src.models import baselines
-from src.models.advanced import LSTMRegressor
 from src.config import DEF_SPLITS
 
 

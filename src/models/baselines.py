@@ -5,8 +5,10 @@ This module contains simple baseline models to serve as performance benchmarks.
 
 import numpy as np
 import pandas as pd
-from typing import Optional, Union
+from typing import Optional
+
 from .base import BaseModel
+
 
 class NaiveBaseline(BaseModel):
     """
@@ -36,6 +38,7 @@ class NaiveBaseline(BaseModel):
             raise NotImplementedError("Last-value strategy requires lag feature access.")
         else:
             raise ValueError(f"Unknown strategy: {self.strategy}")
+
 
 class RandomBaseline(BaseModel):
     """
@@ -71,6 +74,7 @@ class RandomBaseline(BaseModel):
             index=X.index
         )
 
+
 class MarketBenchmark(BaseModel):
     """
     Represents a passive 'Buy & Hold' strategy.
@@ -93,6 +97,7 @@ class MarketBenchmark(BaseModel):
     def predict(self, X: pd.DataFrame) -> pd.Series:
         """Predict the historical mean for all steps."""
         return pd.Series(self.mu, index=X.index)
+
 
 class CAPMBaseline(BaseModel):
     """
@@ -146,6 +151,7 @@ class CAPMBaseline(BaseModel):
         
         prediction = self.risk_free_rate + self.beta * (self.market_return - self.risk_free_rate)
         return pd.Series(prediction, index=X.index)
+
 
 class ClassificationBaseline(BaseModel):
     """Baseline for binary classification tasks."""

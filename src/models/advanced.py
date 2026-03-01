@@ -1,6 +1,6 @@
 """Advanced models implementation: LSTM (PyTorch), XGBoost, and Random Forest."""
 
-from typing import List, Optional, Tuple, Any, Dict
+from typing import List, Optional, Tuple
 import logging
 import numpy as np
 import pandas as pd
@@ -44,6 +44,7 @@ class LSTMModel(nn.Module):
         # Decode the hidden state of the last time step
         out = self.fc(out[:, -1, :])
         return out
+
 
 class LSTMRegressor(BaseModel):
     """

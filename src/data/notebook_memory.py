@@ -86,15 +86,15 @@ def cleanup_notebook_namespace(
     return to_remove
 
 
-def cleanup_section61_memory(
+def cleanup_section62_memory(
     namespace: MutableMapping[str, Any] | None = None,
     *,
     phase: Literal["after_continuous", "final"] = "after_continuous",
     keep_extra: Iterable[str] = (),
 ) -> list[str]:
-    """Preset memory cleanup strategy for Section 6.1 model-zoo notebooks."""
+    """Preset memory cleanup strategy for Section 6.2 model-zoo notebooks."""
     if phase not in SECTION61_PHASE_KEEP:
-        raise ValueError(f"Unknown section 6.1 cleanup phase: {phase}")
+        raise ValueError(f"Unknown section 6.2 cleanup phase: {phase}")
 
     if namespace is None:
         frame = inspect.currentframe()

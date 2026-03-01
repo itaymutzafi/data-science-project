@@ -1,10 +1,10 @@
 import pandas as pd
 from typing import Dict, List
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+
 from src.models import run_binary_cls_with_feature_importance
 from src.config import COMPANY_COLORS, DEF_SPLITS
-from src.models.binary_classification import models_for_target as models
-from sklearn.linear_model import LogisticRegression
 
 
 def target_daily(df):
@@ -35,10 +35,12 @@ def _numeric_target_check_features(df: pd.DataFrame, target_col: str) -> List[st
 
 
 def check_targets(dfs: Dict[str, pd.DataFrame], n_splits:int = DEF_SPLITS):
-    for model in models:
-        targets_df = run_model_for_target(dfs, model, n_splits)
-        evaluation_metrics_target_plt(targets_df)
-        print(avg_accuracy_per_target(targets_df))
+    model = LogisticRegression()
+
+    targets_df = run_model_for_target(dfs, model, n_splits)
+    evaluation_metrics_target_plt(targets_df)
+    print(avg_accuracy_per_target(targets_df))
+
 
 def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
     all_summary_rows = []
@@ -94,6 +96,7 @@ def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DE
     
     return pd.DataFrame(all_summary_rows)
 
+
 def evaluation_metrics_target_plt(df):
     metric = "Accuracy"
     plt.figure(figsize=(9, 4))
@@ -118,6 +121,7 @@ def evaluation_metrics_target_plt(df):
     plt.legend()
     plt.tight_layout()
     plt.show()
+
 
 def avg_accuracy_per_target(df: pd.DataFrame) -> pd.DataFrame:
     return (

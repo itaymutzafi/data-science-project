@@ -3,10 +3,10 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.base import clone
 import pandas as pd
 import numpy as np
+
 from src.evaluation.metrics import evaluate_classification
-from sklearn.linear_model import LogisticRegression
-from xgboost.sklearn import XGBClassifier
 from src.config import DEF_SPLITS
+
 
 def run_binary_cls_with_feature_importance(
     data: pd.DataFrame,
@@ -120,6 +120,3 @@ def run_binary_cls_embedded_importance(
         return pd.DataFrame(columns=["Feature", "Importance", "Fold", "Ticker"])
 
     return pd.concat(all_importances, ignore_index=True)
-
-
-models_for_target = [LogisticRegression()] #, XGBClassifier()]

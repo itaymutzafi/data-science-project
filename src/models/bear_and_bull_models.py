@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.base import clone
+
 from src.evaluation.metrics import evaluate_classification
 from src.features import experiment_create_target_variable
 from src.utils.feature_names import canonicalize_feature_columns
@@ -94,6 +95,7 @@ def _prepare_bull_data(
 
     bull_df = bull_df.dropna()
     return bull_df, target_col
+
 
 def run_bull_only_cv(
     feature_data: Dict[str, pd.DataFrame],
@@ -230,6 +232,7 @@ def run_bull_only_cv(
         return pd.DataFrame()
     return pd.DataFrame(all_results)
 
+
 def _build_feature_strategies() -> Dict[str, Dict[str, List[str]]]:
     """Best feature sets per strategy from Section 6.2."""
     top_experiment = {
@@ -306,7 +309,7 @@ def summarize_bull_only(results: pd.DataFrame) -> tuple:
 
     return summary, best_per_ticker
 
-
+ 
 def run_bull_only(feature_data: Dict[str, pd.DataFrame], *, force_refresh: bool = False) -> tuple:
     """Run bull-only CV with all Section 6.2 strategies and default classifiers.
 

@@ -103,6 +103,7 @@ def forward_feature_selection(
 
     return pd.DataFrame(results)
 
+
 def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
     dfs = _as_ticker_frame_dict(dfs)
     all_forward_histories = []
@@ -127,6 +128,7 @@ def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits:
         all_forward_histories.append(history_df)
 
     return pd.concat(all_forward_histories, ignore_index=True)
+
 
 def feature_selection_plot(df: pd.DataFrame):
     plt.figure(figsize=(9, 6))
@@ -173,6 +175,7 @@ def feature_selection_plot(df: pd.DataFrame):
     
     plt.show()
     plt.close()
+
 
 def get_best_k_features(df: pd.DataFrame, K: int=10, add_prints: bool = True) -> Dict[str, List[str]]:
     best_features = {}
@@ -736,6 +739,7 @@ def forward_feature_selection_per_fold(
 
     return pd.DataFrame(rows)
 
+
 def run_forward_selection_per_fold(
     dfs: Dict[str, pd.DataFrame],
     n_splits: int = SPLITS
@@ -762,6 +766,7 @@ def run_forward_selection_per_fold(
 
     return pd.concat(all_results, ignore_index=True)
 
+
 def get_fold_time_ranges(
     df: pd.DataFrame,
     n_splits: int
@@ -779,6 +784,7 @@ def get_fold_time_ranges(
         })
 
     return pd.DataFrame(rows)
+
 
 def sequential_colors_strong(base_color: str, n: int):
     """
@@ -799,6 +805,7 @@ def sequential_colors_strong(base_color: str, n: int):
         colors.append((ri, gi, bi))
 
     return colors
+
 
 def plot_forward_selection_per_fold(
     fs_fold_df: pd.DataFrame,
