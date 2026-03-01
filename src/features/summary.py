@@ -7,11 +7,8 @@ import seaborn as sns
 from typing import Dict
 
 
-def get_metadata(dfs: Dict[str, pd.DataFrame], *, verbose: bool = False) -> None:
+def get_metadata(dfs: Dict[str, pd.DataFrame]) -> None:
     """Optionally print dataset shapes and first dataframe columns."""
-    if not verbose:
-        return
-
     print("===== shape =====")
     for t, df in dfs.items():
         print(t, df.shape)
