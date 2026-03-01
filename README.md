@@ -35,17 +35,16 @@ Model quality is evaluated out-of-sample under walk-forward protocols, with the 
 │   ├── install_kernel.sh
 │   └── reset_env.sh
 ├── data/
-│   ├── raw/
-│   └── processed/
+│   ├── cache/
+│   ├── processed/
+│   └── raw/
 ├── literature/
-├── reports/
 └── src/
     ├── config.py
     ├── data/
+    ├── evaluation/
     ├── features/
     ├── models/
-    ├── evaluation/
-    ├── pipelines/
     └── utils/
 ```
 
@@ -53,7 +52,7 @@ Model quality is evaluated out-of-sample under walk-forward protocols, with the 
 ### Prerequisites
 - Python `3.11` recommended (`>=3.9` supported by package metadata).
 - macOS/Linux shell (scripts are Bash-based).
-- Internet access for market-data pulls (`yfinance`) and, when recomputing sentiment, model/news dependencies.
+- Internet access for market-data pulls (`yfinance`) and when recomputing sentiment (model/news dependencies).
 
 ### Recommended Setup (One Command)
 ```bash
@@ -84,23 +83,6 @@ conda activate ds-project
 python -m ipykernel install --user --name data-science-project --display-name "Python (Data Science Project)"
 ```
 
-## Data Requirements
-Expected data locations:
-- News corpus (shared file): `data/raw/`
-- Runtime caches (primary): `data/cache/`
-- Legacy fallback caches (auto-migrated on read): `data/raw/` and `data/processed/`
-
-Key files commonly used by the notebook:
-- `data/raw/news_last_5y.parquet`
-- `data/cache/prices/AAPL.parquet`, `data/cache/prices/AMZN.parquet`, `data/cache/prices/GOOG.parquet`, `data/cache/prices/MSFT.parquet`
-- `data/cache/market/auxiliary_market_data.parquet`
-- `data/cache/prophet/<TICKER>_prophet_predictions.parquet`
-- `data/cache/sec_filings/<TICKER>_sec_filings.parquet`
-- `data/cache/sentiment/daily_sentiment_features.csv`
-
-If primary caches are missing, the pipeline can regenerate them. If legacy caches exist,
-the code reads them and materializes the primary cache layout automatically.
-
 ## How To Run
 1. Activate the project environment.
 2. Open Jupyter Lab/Notebook:
@@ -128,40 +110,3 @@ In the robustness experiment section:
 
 Higher values increase subset search coverage and runtime.  
 Current notebook defaults are calibrated for practical reruns on student hardware.
-
-## Methodological Guardrails
-The codebase enforces several principles to protect validity:
-- Time-aware train/validation sequencing (no random shuffling across time).
-- Lagged integration of sentiment features to reduce leakage risk.
-- Feature-set governance via `src/features/sets.py`, including collinearity-aware block sampling.
-- Consistent naming canonicalization via `src/utils/feature_names.py`.
-- Two-tier schema validation in `src/data/validate_schema.py`:
-  - Default lightweight startup gate (`strict=False`).
-  - Full schema/type checks when explicitly enabled (`strict=True`), e.g. after fresh API refresh.
-
-## Engineering Notes
-- The project favors notebook-report reproducibility over ad hoc scripts.
-- Caches are unified under `data/cache/` for deterministic reruns and clearer ownership.
-- Backward compatibility is preserved: legacy caches under `data/raw`/`data/processed` are still readable.
-- The shared news source remains stable at `data/raw/news_last_5y.parquet`.
-- Schemas are stored under `src/data/schemas/` (legacy path fallback is kept for compatibility).
-- Environment helpers are provided under `scripts/`:
-  - `setup_env.sh`: first-time setup.
-  - `install_kernel.sh`: kernel registration only.
-  - `reset_env.sh`: full local environment reset.
-
-## Suggested Evaluation Protocol (For Reviewers)
-1. Run `bash scripts/setup_env.sh`.
-2. Launch `Final_Project_Report.ipynb`.
-3. Execute all cells in order.
-4. Inspect Section `6.1` for robustness experiment outputs:
-   - Continuous: `RMSE`, `R2`, `Adjusted R2`, directional accuracy.
-   - Discrete: `Accuracy`, `Precision`, `Recall`, benchmark comparison.
-
-## Team
-- Itay
-- Moran
-- Shaked
-
-## Academic Context
-Submitted as partial fulfillment of the requirements of the Workshop in Data Science course at Tel Aviv University.
