@@ -606,60 +606,6 @@ def display_demo_sentiment(
                 f"strict_match={strict_match}."
             )
 
-def run_sentiment_pipeline_for_report(
-    stock_df: pd.DataFrame,
-    config_obj: Any,
-    *,
-    sentiment_depth: int | str | None = None,
-) -> pd.DataFrame:
-    """Wrapper to run the full pipeline in the report context."""
-    return generate_daily_sentiment_features(
-        news_path=config_obj.RAW_NEWS_PATH,
-        output_path=config_obj.SENTIMENT_CACHE,
-        n_sample_per_day=config_obj.SAMPLES_PER_DAY,
-        sentiment_depth=sentiment_depth,
-        use_google_news=False,  # offline-safe default; enable explicitly if needed
-        force_compute=getattr(config_obj, 'force_sentiment_compute', False)
-    )
-
-def verify_feature_integration(stock_df: pd.DataFrame):
-    """Checks for sentiment columns in the final dataframe."""
-    expected = ['sentiment_mean', 'news_count', 'sentiment_trend']
-    missing = [c for c in expected if c not in stock_df.columns and f"{c}_lag1" not in stock_df.columns]
-    
-    if missing:
-        print(f" Missing columns: {missing}")
-    else:
-        print(" Sentiment features integrated successfully.")
-
-def verify_unified_data(stock_df: pd.DataFrame, company_name: str):
-    """
-    Displays a sample of the unified dataset where news data is present.
-    Used for verification in notebooks.
-    """
-    print(f"\n--- Unified Data Verification: {company_name} ---")
-    
-    # Check for sentiment columns
-    cols = [c for c in stock_df.columns if 'sentiment' in c or 'news_count' in c]
-    if not cols:
-        print("No sentiment features found.")
-        return
-
-    # Filter for days with news (using lag1 if available, else standard)
-    mask = pd.Series(False, index=stock_df.index)
-    
-    if 'news_count_lag1' in stock_df.columns:
-        mask = stock_df['news_count_lag1'] > 0
-    elif 'news_count' in stock_df.columns:
-        mask = stock_df['news_count'] > 0
-        
-    sample = stock_df[mask]
-    
-    if sample.empty:
-        print("No days with active news found in the dataset.")
-    else:
-        print(f"Found {len(sample)} days with active news.")
-        print(sample[cols + ['Close']].head())
 
 def integrate_sentiment_data(
     stock_df: pd.DataFrame,

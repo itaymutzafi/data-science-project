@@ -10,7 +10,7 @@ import pandas as pd
 import yfinance as yf
 
 from src.config import AUX_DATA_PATH, AUX_TICKER_MAP, LEGACY_AUX_DATA_PATH, LEGACY_RAW_PRICE_DIR, \
-    RAW_PRICE_DIR, TICKERS, START_DATE, DAYS_IN_YEAR
+    RAW_PRICE_DIR, TICKERS, START_DATE, DAYS_IN_YEAR, START_DATE, END_DATE
 from src.utils.feature_names import canonicalize_feature_columns
 
 
@@ -185,4 +185,10 @@ def filter_to_model_range(data: Dict[str, pd.DataFrame],
     Keep only rows from model_start onwards. Use after feature engineering.
     """
     cutoff = pd.Timestamp(model_start)
-    return {t: df.loc[df.index >= cutoff].copy() for t, df in data.items()}
+    data = {t: df.loc[df.index >= cutoff].copy() for t, df in data.items()}
+
+    print(f"Filtered to model range: {START_DATE} to {END_DATE}")
+    for t, df in data.items():
+        print(f" {t}: {len(df)} rows from {df.index.min().date()} to {df.index.max().date()}")
+
+    return data

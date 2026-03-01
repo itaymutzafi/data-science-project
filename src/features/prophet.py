@@ -17,13 +17,16 @@ from src.config import (
 from src.data import fetch_sample_data
 from src.features import add_return_features
 
+
 def _get_prophet_cache_path(ticker: str) -> Path:
     cache_dir = Path(PROPHET_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{ticker}_prophet_predictions.parquet"
 
+
 def _get_legacy_prophet_cache_path(ticker: str) -> Path:
     return Path(LEGACY_PROPHET_CACHE_DIR) / f"{ticker}_prophet_predictions.parquet"
+
 
 def _load_prophet_cache(ticker: str) -> pd.DataFrame:
     primary_path = _get_prophet_cache_path(ticker)
@@ -46,10 +49,12 @@ def _load_prophet_cache(ticker: str) -> pd.DataFrame:
             print(f"Warning: failed to load prophet cache for {ticker}: {exc}")
     return pd.DataFrame()
 
+
 def _save_prophet_cache(ticker: str, df: pd.DataFrame) -> None:
     cache_path = _get_prophet_cache_path(ticker)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path)
+
 
 def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS, force_refresh: bool = False):
     cols = ["prophet_prediction_binary", "prophet_prediction_continuous"]
@@ -61,11 +66,10 @@ def prophet(stocks_data: Dict[str, pd.DataFrame], n_splits: int = DEF_SPLITS, fo
                 stock_df = stock_df.drop(columns=[c for c in cols if c in stock_df.columns])
                 stock_df = stock_df.join(cached[cols], how="left")
                 stocks_data[stock_name] = stock_df
-                print("successfully imported cached prophet data")
+                print(f"{stock_name}: successfully imported cached prophet data")
                 continue
         
         # else - create new prophet columns ->
-
         ticker = Ticker(stock_name)
         proph_start_time = date(2015, 1, 1)
 

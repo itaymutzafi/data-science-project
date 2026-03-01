@@ -4,6 +4,7 @@ import math
 from typing import Dict, List
 
 from src.config import COMPANY_COLORS, FEATURE_WINDOWS
+from src.utils import set_style
 
 
 def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> None:
@@ -29,15 +30,15 @@ def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_W
     print(f"Note: First {max(windows)} rows will contain NaNs (Warm-up Period).")
 
 
-def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> None:
+def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> List[str]:
     """
     Adds Normalized Distance from Moving Averages.
     Formula: (Price - MA) / MA
     
     Dynamically generates columns based on config (e.g. 'Dist_MA50', 'Dist_MA200').
     """
-    print(f"Adding Features: Dist_MA {windows}...")
-    count = 0
+    columns = [f'Dist_MA{win}' for win in windows]
+
     for name, df in dfs.items():
         for win in windows:
             ma_col = f'MA{win}'
@@ -54,8 +55,9 @@ def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = 
             df[col_name] = df[col_name].fillna(0)
         
         dfs[name] = df
-        count += 1
-    print(f" -> Success: Distances added to {count} tickers.")
+        print(f"{name}: Adding Features: Dist_MA with windows {windows}")
+    
+    return columns
 
 
 def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
@@ -153,5 +155,47 @@ def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
     plt.ylabel("MACD")
     plt.grid(True, alpha=0.3)
     plt.legend(ncol=2, fontsize=9)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_ma_distance_grid(dfs: Dict[str, pd.DataFrame], window: int) -> None:
+    """
+    Plots a grid of Trend Distance for all tickers.
+    """
+    set_style()
+    tickers = list(dfs.keys())
+    n_tickers = len(tickers)
+    cols = 2
+    rows = math.ceil(n_tickers / cols)
+    
+    dist_col = f'Dist_MA{window}'
+    
+    _, axes = plt.subplots(rows, cols, figsize=(14, 3 * rows), sharex=True)
+    if n_tickers == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+    
+    for i, ticker in enumerate(tickers):
+        ax = axes[i]
+        df = dfs[ticker]
+        color = COMPANY_COLORS.get(ticker, 'purple')
+        
+        if dist_col in df.columns:
+            ax.plot(df.index, df[dist_col], color=color, linewidth=1, alpha=0.9)
+            ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.7)
+            ax.set_title(f"{ticker}: {window}-Day Trend Dist", fontweight='bold')
+            if i % cols == 0: ax.set_ylabel("Dist (%)")
+    
+    
+    # Hide unused
+    for j in range(len(tickers), len(axes)):
+        axes[j].axis('off')
+    
+    # Ensure x-labels are rotated for clarity
+    for ax in axes:
+        ax.tick_params(axis='x', rotation=45)
+
     plt.tight_layout()
     plt.show()

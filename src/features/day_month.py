@@ -15,6 +15,7 @@ def add_day_month_features(dfs: Dict[str, pd.DataFrame]) -> None:
     
     print(f"{added}: Added Day and Month features")
 
+
 def preprocess_day_feature(df: pd.DataFrame) -> pd.DataFrame:
     """
     Encode day-of-week cyclically using sine and cosine.

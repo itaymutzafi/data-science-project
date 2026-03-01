@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
-from typing import Dict, Tuple, Optional
+from typing import Dict
 
-def bull_and_bear_check_window_size(feature_data: Dict):
+
+def bull_and_bear_check_window_size(feature_data: Dict[str, pd.DataFrame]):
     for ticker, df in feature_data.items():
         df = df.copy()
 
@@ -17,7 +17,7 @@ def bull_and_bear_check_window_size(feature_data: Dict):
             print(f"{ticker}: not enough history for MA50/MA200 regime plot")
             continue
 
-        fig, axes = plt.subplots(1, 2, figsize=(18, 4), sharey=True)
+        _, axes = plt.subplots(1, 2, figsize=(18, 4), sharey=True)
 
         # ---- Left: MA200 ----
         ax = axes[0]
@@ -46,94 +46,6 @@ def bull_and_bear_check_window_size(feature_data: Dict):
         plt.tight_layout()
         plt.show()
 
-# def check_islands(df):
-#     def smooth_regime_causal(regime_bool, min_len):
-#         s = regime_bool.astype(int).copy()
-#         out = s.copy()
-
-#         if len(s) == 0:
-#             return out
-
-#         current = s.iloc[0]
-#         count = 0
-
-#         for i in range(len(s)):
-#             if s.iloc[i] == current:
-#                 count = 0
-#             else:
-#                 count += 1
-#                 if count >= min_len:
-#                     current = s.iloc[i]
-#                     count = 0
-#             out.iloc[i] = current
-
-#         return out
-
-#     # island can be from 1 to 30 days based on calculations
-#     def evaluate_thresholds(df: Dict, min_day: int =1, max_day: int =30, penalty: int =100):
-#         # Raw regime from MA200
-#         ma200 = df['MA200'] if 'MA200' in df.columns else df['Close'].rolling(200).mean()
-#         valid = ma200.notna()
-#         raw = (df.loc[valid, 'Close'] > ma200.loc[valid])
-
-#         if raw.empty:
-#             return (
-#                 pd.Series({'threshold': 13, 'switches': np.nan, 'flipped_fraction': np.nan, 'score': np.inf}),
-#                 pd.DataFrame(columns=['threshold', 'switches', 'flipped_fraction', 'score'])
-#             )
-
-#         rows = []
-#         for t in range(min_day, max_day + 1):
-#             sm = smooth_regime_causal(raw, t)
-#             switches = (sm != sm.shift()).sum()
-#             flipped = (sm != raw).mean()  # fraction of days changed
-#             score = switches + penalty * flipped
-#             rows.append({
-#                 'threshold': t,
-#                 'switches': switches,
-#                 'flipped_fraction': flipped,
-#                 'score': score
-#             })
-
-#         results = pd.DataFrame(rows)
-#         best = results.loc[results['score'].idxmin()]
-#         return best, results
-
-#     thresholds = []
-#     for ticker, df in feature_data.items():
-#         best, table = evaluate_thresholds(df, min_day=1, max_day=30, penalty=100)
-#         best_threshold = int(best['threshold']) if not table.empty else 13
-#         thresholds.append(best_threshold)
-#         print(f"{ticker}: best threshold = {best_threshold}")
-
-#     proj_threshold = int(max(thresholds)) if thresholds else None
-#     print(f"Project threshold = {proj_threshold}")
-
-
-# def make_regime_feature(df, min_len=13):
-#     df = df.copy()
-
-#     # Raw regime from MA200
-#     if 'MA200' not in df.columns:
-#         df['MA200'] = df['Close'].rolling(200).mean()
-
-#     valid = df['MA200'].notna()
-#     raw = (df.loc[valid, 'Close'] > df.loc[valid, 'MA200'])
-
-#     # Smooth islands (merge short runs)
-#     smooth = smooth_regime_causal(raw, min_len=min_len)
-
-#     # Save as binary featre
-#     df['Regime_Bull'] = 0  # 1 = Bull, 0 = Bear
-#     if not smooth.empty:
-#         df.loc[smooth.index, 'Regime_Bull'] = smooth.astype(int)
-#         df['Regime_Bull'] = df['Regime_Bull'].ffill().fillna(0).astype(int)
-    
-#     # Regime_Strength = (Price - MA200) / MA200
-#     df['Regime_Strength'] = 0.0
-#     df.loc[valid, 'Regime_Strength'] = (df.loc[valid, 'Close'] - df.loc[valid, 'MA200']) / df.loc[valid, 'MA200']
-
-#     return df
 
 def smooth_regime_causal(regime_bool: pd.Series, min_len: int) -> pd.Series:
     """
@@ -160,6 +72,7 @@ def smooth_regime_causal(regime_bool: pd.Series, min_len: int) -> pd.Series:
         out.iloc[i] = current
 
     return out
+
 
 def evaluate_regime_thresholds(feature_data: Dict[str, pd.DataFrame], 
                                min_day: int = 1, 
@@ -196,6 +109,7 @@ def evaluate_regime_thresholds(feature_data: Dict[str, pd.DataFrame],
     proj_threshold = int(max(all_ticker_thresholds)) if all_ticker_thresholds else 13
     print(f"Global Project Threshold determined: {proj_threshold} days")
     return proj_threshold
+
 
 def make_regime_features(df: pd.DataFrame, bull_and_bear_threshold: int) -> pd.DataFrame:
     """
