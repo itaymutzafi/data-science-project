@@ -1,8 +1,4 @@
-"""Schema validation helpers.
-
-Default behavior is a lightweight integrity gate for notebook startup.
-Strict validation can be enabled explicitly for deeper schema checks.
-"""
+"""Schema validation helpers for project dataframes."""
 
 from __future__ import annotations
 
@@ -17,7 +13,7 @@ LEGACY_SCHEMA_DIR = Path(__file__).parent
 
 
 def load_schema(json_name: str) -> Dict[str, Any]:
-    """Load schema file from the canonical schema directory with legacy fallback."""
+    """Load a JSON schema with canonical-first and legacy fallback lookup."""
     schema_file = Path(json_name).name
     candidates = [SCHEMA_DIR / schema_file, LEGACY_SCHEMA_DIR / schema_file]
 
@@ -236,11 +232,10 @@ def validate_schema(
     verbose: bool = True,
     label: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Validate a DataFrame against schema.
+    """Validate a dataframe against a schema and return a structured report.
 
-    Modes:
-    - strict=False (default): lightweight startup gate.
-    - strict=True: full schema checks (types, optional fields, minimum constraints).
+    `strict=False` runs lightweight integrity checks for notebook startup.
+    `strict=True` additionally enforces type and optional-field constraints.
     """
     schema = load_schema(json_name)
     issues: List[Dict[str, str]] = []
@@ -276,7 +271,7 @@ def validate_schema_all_dfs(
     raise_on_error: bool = False,
     verbose: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
-    """Validate multiple dataframes and return per-key reports."""
+    """Validate multiple dataframes and return per-name reports."""
     reports: Dict[str, Dict[str, Any]] = {}
     for name, df in dfs.items():
         reports[name] = validate_schema(

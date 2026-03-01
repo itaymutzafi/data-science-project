@@ -1,10 +1,12 @@
+"""Feature-set definitions and sampling utilities."""
+
 from typing import List, Dict, Optional, Tuple, Iterable
 import pandas as pd
 import random
 from src.config import SENTIMENT_MA_WINDOW, SENTIMENT_MOMENTUM_WINDOW, VOLATILITY_WINDOWS, FEATURE_WINDOWS, TICKERS
 from src.utils.feature_names import canonicalize_feature_name
 
-BASIC_FEATURES = ["Close"] # chose only one and not ["Open", "High", "Low", "Close"]
+BASIC_FEATURES = ["Close"]
 VOLUME_FEATURE = ["Volume"]
 DIV_FEATURE = ["Dividends"]
 SPLIT_FEATURE = ["Stock Splits"]
@@ -72,11 +74,8 @@ BLOCKS = {
     "RSI": RSI_FEATURE,
     "Trend": MA_DIST_FEATURES,
     "Interaction": INTERACTION_FEATURES,
-    # "Peer" is added per ticker
 }
 
-# Keep sampled sets relatively lean: this improved LR stability in section 6.1
-# while preserving enough diversity across runs.
 MIN_RANDOM_BLOCKS = 2
 MAX_RANDOM_BLOCKS = 4
 MA_MULTI_PICK_PROB = 0.65
@@ -84,13 +83,7 @@ MAX_MA_FEATURES_PER_SET = 2
 
 
 def _sample_features_from_block(block_name: str, block_features: List[str]) -> List[str]:
-    """
-    Sample representative features while controlling within-block collinearity.
-
-    Default behavior is one feature per block. Moving-average windows are the
-    explicit exception: we may sample two windows together to preserve
-    short-vs-long horizon information.
-    """
+    """Sample representative features from a block."""
     if not block_features:
         return []
 
@@ -108,6 +101,7 @@ def generate_diverse_combinations(
     *,
     verbose: bool = False,
 ) -> Dict[str, Dict[int, List[str]]]:
+    """Generate randomized feature-set collections for all ticker dataframes."""
     ticker_diverse_sets = {}
 
     for ticker, _ in dfs.items():
@@ -128,13 +122,7 @@ def generate_diverse_combination_per_ticker(
     *,
     verbose: bool = False,
 ) -> Dict[int, List[str]]:
-    """Generate N random combinations with block-level collinearity control.
-
-    Args:
-        ticker
-        n: Number of combinations.
-        random_state: Seed for reproducibility. If None, no seeding is applied.
-    """
+    """Generate random feature-set combinations for a single ticker."""
     if random_state is not None:
         random.seed(random_state)
 
@@ -149,9 +137,6 @@ def generate_diverse_combination_per_ticker(
         max_blocks = min(MAX_RANDOM_BLOCKS, max(1, len(block_names) - 1))
         num_blocks = random.randint(min_blocks, max_blocks)
 
-        # Always have basic feature
-        # `random.sample` keeps block names unique, so we never pick two features
-        # from the same conceptual block except the moving-average exception.
         other_blocks = [b for b in block_names if b != "Basic"]
         selected_block_names = ["Basic"] + random.sample(other_blocks, num_blocks)
 
@@ -159,13 +144,12 @@ def generate_diverse_combination_per_ticker(
         for name in selected_block_names:
             combo.extend(_sample_features_from_block(name, blocks[name]))
 
-        # Remove potential duplicates while preserving deterministic order.
         combo = list(dict.fromkeys(combo))
-        
+
         subset_id = i + 1
 
         combinations[subset_id] = combo
-        
+
     if verbose:
         print(f"[sets] Generated {len(combinations)} diverse combos (seed={random_state}) for {ticker}")
 
@@ -173,6 +157,7 @@ def generate_diverse_combination_per_ticker(
 
 
 def print_feature_sets(ticker_diverse_sets: Dict[str, Dict[int, List[str]]]):
+    """Print sampled feature sets grouped by ticker."""
     for ticker, diverse_sets in ticker_diverse_sets.items():
         print(f"\nTicker: {ticker}")
         for k, v, in diverse_sets.items():
@@ -202,6 +187,7 @@ def feature_sets_to_frame(ticker_diverse_sets: Dict[str, Dict[int, List[str]]]) 
 
 
 def build_feature_to_block_map() -> Tuple[Dict[str, str], Dict[str, List[str]]]:
+    """Return feature-to-block mapping and the resolved block dictionary."""
     feature_to_block = {}
 
     blocks = BLOCKS.copy()

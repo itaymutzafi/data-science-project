@@ -40,14 +40,14 @@ PROCESSED_SENTIMENT_PATH = PROCESSED_DATA_DIR / "daily_sentiment.parquet"
 SENTIMENT_CACHE = SENTIMENT_CACHE_DIR / "daily_sentiment_features.csv"
 LEGACY_SENTIMENT_CACHE = PROCESSED_DATA_DIR / "daily_sentiment_features.csv"
 
-# Tickers / Companys
+# Tickers / companies
 TICKER_TO_COMPANY_MAP = {
     "AAPL": "Apple",
     "MSFT": "Microsoft",
     "AMZN": "Amazon",
     "GOOG": "Google",
 }
-COMPANY_TO_TICKERS_MAP = {v : k for k,v in TICKER_TO_COMPANY_MAP.items()}
+COMPANY_TO_TICKERS_MAP = {v: k for k, v in TICKER_TO_COMPANY_MAP.items()}
 TICKERS = list(TICKER_TO_COMPANY_MAP.keys())
 
 # Time Range
@@ -61,10 +61,10 @@ DAYS_IN_YEAR = 365.25
 
 # Features
 AUX_TICKER_MAP = {
-    'QQQ': 'Nasdaq_100',
-    '^VIX': 'VIX_Index',
-    '^TNX': 'Treasury_10Y',
-    'NVDA': 'NVDA_Leader',
+    "QQQ": "Nasdaq_100",
+    "^VIX": "VIX_Index",
+    "^TNX": "Treasury_10Y",
+    "NVDA": "NVDA_Leader",
 }
 SAMPLES_PER_DAY = 1
 
@@ -78,7 +78,7 @@ SENTIMENT_MOMENTUM_WINDOW = 3    # Short-term sentiment shift
 # Models
 SEED = 42
 DEF_SPLITS = 5
-SPLITS = 2#DEF_SPLITS
+SPLITS = DEF_SPLITS
 
 # Visualization Colors
 COMPANY_COLORS = {
@@ -94,8 +94,8 @@ COMPANY_COLORS = {
     "MSFT": "#F25022"
 }
 AUX_COLORS = {
-    'Nasdaq_100': '#663399',          # RebeccaPurple (Rich, distinct index color)
-    'VIX_Index': '#E0115F',           # Ruby (Distinct from Microsoft Red, signaling alert)
-    'Treasury_10Y': '#708090',        # SlateGray (Neutral, bond-like)
-    'NVDA_Leader': '#20B2AA'          # LightSeaGreen (Distinct from Apple, tech-like)
+    "Nasdaq_100": "#663399",          # RebeccaPurple (rich, distinct index color)
+    "VIX_Index": "#E0115F",           # Ruby (distinct from Microsoft red, signaling alert)
+    "Treasury_10Y": "#708090",        # SlateGray (neutral, bond-like)
+    "NVDA_Leader": "#20B2AA",         # LightSeaGreen (distinct from Apple, tech-like)
 }

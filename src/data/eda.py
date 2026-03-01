@@ -1,3 +1,5 @@
+"""EDA plotting utilities."""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -8,13 +10,12 @@ from src.evaluation.plots import set_style
 
 
 def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: str, is_scatter: bool) -> None:
+    """Plot a selected attribute for multiple ticker dataframes."""
     set_style()
     for name, df in dfs.items():
         if attr in df.columns:
             if is_scatter:
                 s = df[attr].copy()
-
-                # Keep only actual events
                 s = s.dropna()
                 s = s[s > 0]
                 if s.empty:
@@ -32,19 +33,21 @@ def eda_attr_comparative_plot(dfs: Dict[str, pd.DataFrame], attr: str, title: st
     plt.show()
 
 
-def eda_correlation(ticker_name: str, df, corr_method: str='pearson') -> None:
+def eda_correlation(ticker_name: str, df: pd.DataFrame, corr_method: str = "pearson") -> None:
+    """Plot a correlation heatmap for standard OHLCV columns."""
     set_style()
-    corr_cols = ['Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock Splits'] 
-    corr_cols = [c for c in corr_cols if c in df.columns] 
-    if len(corr_cols) > 1: 
+    corr_cols = ["Open", "High", "Low", "Close", "Volume", "Dividends", "Stock Splits"]
+    corr_cols = [c for c in corr_cols if c in df.columns]
+    if len(corr_cols) > 1:
         corr = df[corr_cols].corr(method=corr_method)
-        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f") 
+        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
         plt.title(f"{corr_method} Correlation: {ticker_name}")
-        plt.tight_layout() 
+        plt.tight_layout()
         plt.show()
 
 
 def stock_split_table(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return a table of non-zero stock split events across tickers."""
     set_style()
     rows = []
     for ticker, df in dfs.items():
@@ -65,6 +68,7 @@ def stock_split_table(dfs: Dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 
 def correlation_breakdown_plot(df: pd.DataFrame) -> None:
+    """Plot Open vs Close/High/Low scatter comparisons."""
     _, axes = plt.subplots(1, 3, figsize=(15, 4))
 
     pairs = [

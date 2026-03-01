@@ -1,16 +1,27 @@
+"""SEC filing feature engineering utilities."""
+
+from pathlib import Path
+from typing import Dict, List
+
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from typing import Dict, List
 import yfinance as yf
-from pathlib import Path
 
-from src.config import *
+from src.config import (
+    COMPANY_COLORS,
+    COMPANY_TO_TICKERS_MAP,
+    LEGACY_SEC_FILINGS_CACHE_DIR,
+    SEC_FILINGS_CACHE_DIR,
+    TICKERS,
+    TICKER_TO_COMPANY_MAP,
+)
 from src.utils.feature_names import canonicalize_feature_columns
 
 
 def plot_sec_fiilings_dates(reports_by_company):
+    """Plot SEC filing dates per ticker."""
     _, ax = plt.subplots(figsize=(12, 6))
     has_data = False
     for i, ticker in enumerate(TICKERS):
@@ -46,9 +57,10 @@ def plot_sec_fiilings_dates(reports_by_company):
     plt.legend()
     plt.show()
 
-def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
+
+def create_days_to_report(df: pd.DataFrame, report_dates: List) -> pd.DataFrame:
+    """Add days-to-nearest-filing feature for each row."""
     df = df.copy()
-    # Ensure index is datetime and sorted
     df.index = pd.to_datetime(df.index)
     df = df.sort_index()
 
@@ -69,15 +81,21 @@ def create_days_to_report(df:pd.DataFrame, report_dates:List) -> pd.DataFrame:
 
     return df
 
+
 def _get_reports_cache_path(ticker: str) -> Path:
+    """Return cache path for SEC filings of a ticker."""
     cache_dir = Path(SEC_FILINGS_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / f"{ticker}_sec_filings.parquet"
 
+
 def _get_legacy_reports_cache_path(ticker: str) -> Path:
+    """Return legacy SEC filings cache path for a ticker."""
     return Path(LEGACY_SEC_FILINGS_CACHE_DIR) / f"{ticker}_sec_filings.parquet"
 
+
 def _load_reports_cache(ticker: str) -> List[dict]:
+    """Load SEC filings from cache with legacy fallback."""
     primary_path = _get_reports_cache_path(ticker)
     legacy_path = _get_legacy_reports_cache_path(ticker)
 
@@ -91,7 +109,6 @@ def _load_reports_cache(ticker: str) -> List[dict]:
             if "date" in df.columns:
                 df["date"] = pd.to_datetime(df["date"])
 
-            # One-time migration from legacy cache to primary layout.
             if cache_path != primary_path:
                 _save_reports_cache(ticker, df.to_dict("records"))
 
@@ -100,14 +117,18 @@ def _load_reports_cache(ticker: str) -> List[dict]:
             print(f"Warning: failed to load filings cache for {ticker}: {exc}")
     return []
 
+
 def _save_reports_cache(ticker: str, filings: List[dict]) -> None:
+    """Persist SEC filings cache for a ticker."""
     cache_path = _get_reports_cache_path(ticker)
     df = pd.DataFrame(filings)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     df.to_parquet(cache_path, index=False)
 
+
 def create_reports_dic(force_refresh: bool = False) -> Dict:
+    """Collect SEC filings for all configured tickers."""
     reports_by_company = {}
 
     for company_name in TICKERS:
@@ -127,7 +148,6 @@ def create_reports_dic(force_refresh: bool = False) -> Dict:
                 print(f"Warning: failed to fetch filings for {company_name}: {exc}")
                 filings = _load_reports_cache(company_name)
         else:
-            # Fallback: skip gracefully when API not available in current yfinance
             print(f"Warning: SEC filings API not available for {company_name}. Skipping.")
             filings = _load_reports_cache(company_name)
         
@@ -141,7 +161,9 @@ def create_reports_dic(force_refresh: bool = False) -> Dict:
 
     return reports_by_company
 
+
 def reports(dfs: Dict[str, pd.DataFrame], force_refresh: bool = False) -> None:
+    """Add SEC filing proximity feature to each ticker dataframe."""
     reports_by_company = create_reports_dic(force_refresh=force_refresh)
     plot_sec_fiilings_dates(reports_by_company)    
     

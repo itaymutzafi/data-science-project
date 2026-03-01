@@ -1,3 +1,5 @@
+"""Public API for the evaluation package."""
+
 from .analysis import check_stationarity, run_stationarity_analysis
 from .metrics import evaluate_regression, CLS_METRICS, REG_METRICS
 from .plots import (

@@ -1,14 +1,10 @@
-"""Evaluation module.
-
-Defines the business and technical metrics used in the project.
-"""
+"""Regression and classification evaluation metrics."""
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, precision_score, recall_score, f1_score
 from typing import Dict
+from sklearn.metrics import f1_score, mean_absolute_error, mean_squared_error, precision_score, r2_score, recall_score
 
-# Metrics for each task, and if they are ascending
 CLS_METRICS = {"Accuracy": False, "Precision": False, "Recall": False}
 REG_METRICS = {"RMSE": True, "R2": False, "Directional Accuracy": False}
 
@@ -32,20 +28,17 @@ def _safe_information_coefficient(y_true: pd.Series, y_pred: pd.Series) -> float
 
 
 def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
-    """Compute (annualized) Sharpe ratio for a daily returns series.
-    
-    Formula: sqrt(252) * (mean(R) - Rf) / std(R)
-    """
+    """Compute annualized Sharpe ratio for daily returns."""
     if len(returns) == 0:
         return 0.0
-    
-    excess_returns = returns - risk_free_rate / 252  # Assuming Rf is annual
+
+    excess_returns = returns - risk_free_rate / 252
     mean_excess_return = excess_returns.mean()
     std_excess_return = excess_returns.std()
-    
+
     if std_excess_return == 0:
         return 0.0
-        
+
     return np.sqrt(252) * (mean_excess_return / std_excess_return)
 
 
@@ -61,51 +54,49 @@ def calculate_max_drawdown(returns: pd.Series) -> float:
 
 
 def calculate_sortino_ratio(returns: pd.Series, risk_free_rate: float = 0.0) -> float:
-    """Compute (annualized) Sortino ratio (return / downside deviation)."""
+    """Compute annualized Sortino ratio for daily returns."""
     if len(returns) == 0:
         return 0.0
-    
+
     excess_returns = returns - risk_free_rate / 252
     downside_returns = excess_returns[excess_returns < 0]
-    
+
     if len(downside_returns) == 0:
         return np.inf
-        
+
     downside_std = downside_returns.std()
-    
+
     if downside_std == 0:
         return np.inf
-        
+
     return np.sqrt(252) * (excess_returns.mean() / downside_std)
 
 
 def calculate_calmar_ratio(returns: pd.Series) -> float:
-    """Compute Calmar Ratio (Annualized Return / Max Drawdown)."""
+    """Compute Calmar ratio from annualized return and max drawdown."""
     if returns.empty:
         return 0.0
-        
+
     max_dd = abs(calculate_max_drawdown(returns))
     if max_dd == 0:
-        return 0.0 # or inf, but 0 is safer for plotting
-        
-    # Annualized return
-    # If returns are daily log returns, mean * 252 is approx annual log return
+        return 0.0
+
     ann_return = returns.mean() * 252
-    
+
     return ann_return / max_dd
 
 
 def calculate_profit_factor(returns: pd.Series) -> float:
-    """Compute Profit Factor (Gross Profit / Gross Loss)."""
+    """Compute profit factor from positive and negative return sums."""
     if returns.empty:
         return 0.0
-        
+
     profits = returns[returns > 0].sum()
     losses = abs(returns[returns < 0].sum())
-    
+
     if losses == 0:
         return np.inf if profits > 0 else 0.0
-        
+
     return profits / losses
 
 
@@ -115,17 +106,7 @@ def evaluate_regression(
     model_name: str = None,
     n_features: int | None = None,
 ) -> Dict[str, float]:
-    """Compute regression & business metrics (MSE, R2, DA, Sharpe).
-    
-    Args:
-        y_true: Actual log returns.
-        y_pred: Predicted log returns.
-        model_name
-        
-    Returns:
-        Dictionary of metrics.
-    """
-    # 1. Standard Regression Metrics
+    """Compute regression and strategy-oriented evaluation metrics."""
     mse = mean_squared_error(y_true, y_pred)
     rmse = np.sqrt(mse)
     mae = mean_absolute_error(y_true, y_pred)
@@ -141,9 +122,6 @@ def evaluate_regression(
         else:
             adjusted_r2 = 1 - ((1 - r2) * (n_obs - 1) / denom)
 
-    # 2. Business Metrics
-    # Directional Accuracy: % of times sign(y_pred) == sign(y_true)
-    # We use sign(y) where 0 is considered positive or handled consistently
     correct_direction = np.sign(y_true) == np.sign(y_pred)
     da = np.mean(correct_direction)
 
@@ -158,16 +136,12 @@ def evaluate_regression(
         max_dd = 0.0
         ic = 0.0
     else:
-        # Binary labels for classification-style metrics (positive vs non-positive)
         y_true_bin = (y_true > 0).astype(int)
         y_pred_bin = (y_pred > 0).astype(int)
         precision = precision_score(y_true_bin, y_pred_bin, zero_division=0)
         recall = recall_score(y_true_bin, y_pred_bin, zero_division=0)
         f1 = f1_score(y_true_bin, y_pred_bin, zero_division=0)
-        
-        # Sharpe Ratio of the STRATEGY
-        # Strategy: if pred > 0 buy, else sell/hold.
-        # We compute the Sharpe of a portfolio that follows the model's signals.
+
         strategy_returns = np.sign(y_pred) * y_true
         strategy_sharpe = calculate_sharpe_ratio(strategy_returns)
         strategy_sortino = calculate_sortino_ratio(strategy_returns)
@@ -198,15 +172,14 @@ def evaluate_regression(
 
 def evaluate_classification(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
     """Compute classification metrics."""
-    # Ensure inputs are valid
     if y_true.empty or y_pred.empty:
         return {}
-        
+
     acc = np.mean(y_true == y_pred)
-    prec = precision_score(y_true, y_pred, average='weighted', zero_division=0)
-    rec = recall_score(y_true, y_pred, average='weighted', zero_division=0)
-    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
-    
+    prec = precision_score(y_true, y_pred, average="weighted", zero_division=0)
+    rec = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+    f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+
     return {
         "Accuracy": acc,
         "Precision": prec,

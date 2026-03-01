@@ -1,15 +1,12 @@
-"""
-Visualization module for experiment result comparisons.
-"""
+"""Result comparison and ranking utilities."""
 
-from typing import List, Dict
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
+from typing import Dict, List
 
 from src.config import COMPANY_COLORS
 
-# Set global style defaults for consistency
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 
 MODEL_MARKERS = ["o", "s", "D", "^", "v", "P", "X", "*", "<", ">"]
@@ -17,6 +14,7 @@ BASELINES = {"NaiveBaseline", "MarketBenchmark", "RandomBaseline", "CAPMBaseline
 
 
 def _flatten_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Flatten MultiIndex columns created by grouped aggregations."""
     df = df.copy()
     df.columns = [
         f"{c[0]}_{c[1]}" if isinstance(c, tuple) else c
@@ -60,6 +58,7 @@ def collect_top_results(
 
 
 def get_top_results(metrics: Dict[str, bool], df: pd.DataFrame):
+    """Print top aggregated results for each requested metric."""
     best_dfs = collect_top_results(metrics, df, top_n=50)
     if not best_dfs:
         print("No results to display (DataFrame is empty).")
@@ -74,8 +73,8 @@ def get_top_results(metrics: Dict[str, bool], df: pd.DataFrame):
         print(df_metric.to_string(index=False))
 
 
-def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg_fn: str = "mean",  # or "median"
-) -> None:
+def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg_fn: str = "mean") -> None:
+    """Plot a metric by feature set, colored by ticker and marked by model."""
     if results_df.empty:
         return
 
@@ -83,14 +82,12 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
     if not required_cols.issubset(results_df.columns):
         raise ValueError(f"Missing columns: {required_cols - set(results_df.columns)}")
 
-    # --- 1. Aggregate over folds ---
     agg_df = (
         results_df
         .groupby(["Ticker", "Model", "FeatureSet"], as_index=False)
         .agg({metric: agg_fn})
     )
 
-    # --- 2. Marker mapping per model ---
     models = sorted(agg_df["Model"].unique())
     marker_map = {
         model: MODEL_MARKERS[i % len(MODEL_MARKERS)]
@@ -99,7 +96,6 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
 
     plt.figure(figsize=(12, max(6, len(agg_df["FeatureSet"].unique()) * 0.5)))
 
-    # --- 3. Plot points ---
     for model, model_df in agg_df.groupby("Model"):
         for ticker, ticker_df in model_df.groupby("Ticker"):
             color = COMPANY_COLORS.get(ticker, "gray")
@@ -115,14 +111,11 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
                 linewidths=0.6,
             )
 
-    # --- 4. Axis formatting ---
     plt.xlabel(metric, fontsize=14, weight="bold")
     plt.ylabel("Feature Set", fontsize=14, weight="bold")
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
 
-    # --- 5. Legends (INSIDE the plot) ---
-    # Ticker legend (colors)
     ticker_handles = [
         plt.Line2D(
             [0], [0],
@@ -137,7 +130,6 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
         if ticker in agg_df["Ticker"].unique()
     ]
 
-    # Model legend (markers)
     model_handles = [
         plt.Line2D(
             [0], [0],
@@ -173,7 +165,6 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
 
     plt.title(f"{metric} by Feature Set, Ticker and Model", fontsize=16, weight="bold")
     plt.tight_layout()
-    # --- Force y-axis to show all FeatureSet values ---
     feature_sets = sorted(agg_df["FeatureSet"].unique())
 
     plt.yticks(
@@ -182,12 +173,12 @@ def plot_metric_by_featureset_scatter(results_df: pd.DataFrame, metric: str, agg
         fontsize=12
     )
 
-    # Display inline without persisting to disk
     plt.show()
-    plt.close()  # Free memory immediately
+    plt.close()
 
 
 def plot_metrics_by_featureset(metrics: List[str], df: pd.DataFrame):
+    """Plot multiple metrics by feature set after baseline filtering."""
     if df.empty:
         print("No results to plot.")
         return
@@ -199,9 +190,7 @@ def plot_metrics_by_featureset(metrics: List[str], df: pd.DataFrame):
             if filtered_cls.empty:
                 continue
             plot_metric_by_featureset_scatter(filtered_cls, metric)
-            # Clear memory after each plot
             plt.close()
     except Exception as e:
         print(f"Plotting skipped due to error: {e}")
-        # Ensure we don't leave lingering plots
-        plt.close('all')
+        plt.close("all")

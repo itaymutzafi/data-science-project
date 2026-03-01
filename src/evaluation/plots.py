@@ -1,3 +1,5 @@
+"""Visualization utilities for evaluation and diagnostics."""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -43,14 +45,7 @@ def plot_walk_forward_validation(
     date_index: pd.Index | None = None,
     toc_safe: bool = True,
 ) -> None:
-    """Visualize strict walk-forward validation (expanding window) using TimeSeriesSplit.
-
-    Args:
-        n_splits: Number of folds. If None, taken from src.config.SPLITS.
-        total_samples: Timeline length when date_index is not provided.
-        date_index: Optional datetime-like index for date-based x-axis labeling.
-        toc_safe: Leave extra left margin for notebook TOC overlays.
-    """
+    """Visualize expanding-window walk-forward splits."""
     if n_splits is None:
         n_splits = project_config.SPLITS
     if n_splits < 1:
@@ -76,9 +71,9 @@ def plot_walk_forward_validation(
     fig_height = max(4.2, 1.8 + 0.55 * n_splits)
     fig, ax = plt.subplots(figsize=(12.5, fig_height))
 
-    train_color = "#34495E"   # muted slate
-    val_color = "#1F7A8C"     # muted teal
-    base_color = "#EEF2F7"    # subtle timeline background
+    train_color = "#34495E"
+    val_color = "#1F7A8C"
+    base_color = "#EEF2F7"
     bar_height = 0.58
 
     for fold_idx, (train_idx, val_idx) in enumerate(splits):
@@ -87,7 +82,6 @@ def plot_walk_forward_validation(
         train_width = train_end - train_start
         val_width = val_end - val_start
 
-        # Full timeline background for each fold (for visual context)
         ax.barh(
             y=fold_idx,
             width=total_samples,
@@ -155,7 +149,6 @@ def plot_walk_forward_validation(
     apply_academic_style(ax, "Strict Walk-Forward Validation")
     ax.set_facecolor("white")
     if toc_safe:
-        # Leave extra left margin for notebook TOC overlays.
         fig.subplots_adjust(left=0.18, right=0.98, top=0.86, bottom=0.12)
     else:
         fig.tight_layout(rect=[0, 0, 1, 0.90])
@@ -163,7 +156,7 @@ def plot_walk_forward_validation(
 
 
 def plot_target_alignment(horizon: int = 1, lookback: int = 10) -> None:
-    """Visualize temporal alignment between available features at t and forward target y_t^(h)."""
+    """Visualize temporal alignment between features and forward targets."""
     if horizon < 1:
         raise ValueError("horizon must be a positive integer.")
     if lookback < 1:
@@ -216,10 +209,10 @@ def plot_return_distributions(
     df: pd.DataFrame | Dict[str, pd.DataFrame],
     title: str = "Log-Return Distributions by Ticker",
 ) -> None:
-    """KDE of log-return distributions across tickers."""
+    """Plot log-return KDEs by ticker."""
     set_style()
     df = ensure_dataframe(df)
-    
+
     if "Ticker" not in df.columns or "Log_Return" not in df.columns:
         print("Return distribution plot requires 'Ticker' and 'Log_Return' columns.")
         return
@@ -246,7 +239,6 @@ def plot_correlation_heatmap(
         print("Correlation heatmap requires 'Ticker' and 'Log_Return' columns.")
         return
     pivot_ret = df.pivot_table(index=df.index, columns="Ticker", values="Log_Return")
-    # Drop tickers with no data to avoid empty/NaN-only heatmaps
     pivot_ret = pivot_ret.dropna(axis=1, how="all")
     if pivot_ret.empty:
         print("No log return data available to plot correlation heatmap.")
@@ -269,61 +261,47 @@ def plot_correlation_heatmap(
 
 
 def plot_stationarity_check(df: pd.DataFrame, target_col: str = "Log_Return", window: int = 30, ticker: str = "Stock") -> None:
-    """
-    Plot stationarity checks: Raw Price, Log Returns, and Rolling Statistics.
-    
-    Args:
-        df: DataFrame containing price data.
-        target_col: Name of the return column. Calculated if missing.
-        window: Window size for rolling statistics.
-        ticker: Ticker symbol for display.
-    """
+    """Plot price, returns, and rolling statistics for stationarity diagnostics."""
     set_style()
-    
-    # Ensure dataframe is a copy to avoid side effects
+
     plot_df = df.copy()
-    
-    # Robustly handle index
+
     if not isinstance(plot_df.index, pd.DatetimeIndex):
         plot_df.index = pd.to_datetime(plot_df.index)
-        
-    # Calculate Log_Return if missing
+
     if target_col not in plot_df.columns:
         if "Close" in plot_df.columns:
             plot_df[target_col] = np.log(plot_df["Close"] / plot_df["Close"].shift(1))
         elif "Adj Close" in plot_df.columns:
             plot_df[target_col] = np.log(plot_df["Adj Close"] / plot_df["Adj Close"].shift(1))
-            
+
     plot_df = plot_df.dropna()
-    
+
     fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
-    
-    # 1. Raw Price
+
     price_col = "Close" if "Close" in plot_df.columns else "Adj Close"
     if price_col in plot_df.columns:
         axes[0].plot(plot_df.index, plot_df[price_col], label=f"{price_col} Price", color="#1B263B")
         axes[0].set_title(f"{ticker} Raw Price ($P_t$): Non-Stationary", fontweight="bold")
         axes[0].legend(loc="upper left")
         axes[0].grid(True, alpha=0.3)
-    
-    # 2. Log Returns
+
     if target_col in plot_df.columns:
         axes[1].plot(plot_df.index, plot_df[target_col], label="Log Returns", color="#CA6702", alpha=0.8)
         axes[1].axhline(0, color="black", linewidth=0.8, linestyle="--")
-        axes[1].set_title(f"Log Returns ($Y_t$): Stationary", fontweight="bold")
+        axes[1].set_title("Log Returns ($Y_t$): Stationary", fontweight="bold")
         axes[1].legend(loc="upper left")
         axes[1].grid(True, alpha=0.3)
-        
-        # 3. Rolling Statistics
+
         rolling_mean = plot_df[target_col].rolling(window=window).mean()
         rolling_std = plot_df[target_col].rolling(window=window).std()
-        
+
         axes[2].plot(plot_df.index, plot_df[target_col], label="Log Returns", color="#CA6702", alpha=0.2)
         axes[2].plot(plot_df.index, rolling_mean, label=f"{window}-Day Mean", color="#0A9396", linewidth=2)
         axes[2].plot(plot_df.index, rolling_std, label=f"{window}-Day Std", color="#9B2226", linestyle="--", linewidth=2)
         axes[2].set_title(f"Rolling Statistics ({window} Days)", fontweight="bold")
         axes[2].legend(loc="upper left")
         axes[2].grid(True, alpha=0.3)
-    
+
     plt.tight_layout()
     plt.show()

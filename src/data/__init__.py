@@ -1,3 +1,5 @@
+"""Public API for the data package."""
+
 from .eda import eda_attr_comparative_plot, eda_correlation, stock_split_table, correlation_breakdown_plot
 from .loader import fetch_data_for_eda, fetch_auxiliary_data, fetch_sample_data, filter_to_model_range
 from .news_loader import get_news_df_from_file, get_google_news_titles

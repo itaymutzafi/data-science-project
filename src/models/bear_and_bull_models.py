@@ -1,9 +1,11 @@
-# === Regime-Conditional Training: Bull-Only Robustness Check ===
-# Logic:
-#   1. Compute target on the FULL (contiguous) time series so shift(-horizon) is correct.
-#   2. Filter to Regime_Bull==1 rows AFTER target creation.
-#   3. Drop constant / regime columns that are uninformative in the bull-only subset.
-#   4. Run walk-forward CV on the filtered bull-only data with a given feature set per ticker.
+"""Bull-only regime evaluation utilities.
+
+Workflow:
+1. Create targets on the full contiguous timeline.
+2. Filter to bull regime rows (`Regime_Bull == 1`).
+3. Remove regime columns that become constant in this subset.
+4. Run walk-forward classification across feature strategies.
+"""
 
 import json
 import pandas as pd
@@ -30,12 +32,14 @@ _BULL_RESULTS_FILENAME = "bull_only_cv_results.parquet"
 
 
 def _get_bull_cache_path() -> Path:
+    """Return cache path for bull-only CV results."""
     cache_dir = Path(config.BULL_RESULTS_CACHE_DIR)
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir / _BULL_RESULTS_FILENAME
 
 
 def _load_bull_cache() -> pd.DataFrame:
+    """Load bull-only cached results if available."""
     cache_path = _get_bull_cache_path()
     if not cache_path.exists():
         return pd.DataFrame()
@@ -50,6 +54,7 @@ def _load_bull_cache() -> pd.DataFrame:
 
 
 def _save_bull_cache(df: pd.DataFrame) -> None:
+    """Persist bull-only CV results to cache."""
     cache_path = _get_bull_cache_path()
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     save_df = df.copy()
@@ -105,6 +110,7 @@ def run_bull_only_cv(
     model_names: Optional[List[str]] = None,
     n_splits: int = 5,
     min_fold_size: int = 50,
+    verbose: bool = False,
 ) -> pd.DataFrame:
     """Train and validate only on bull days across multiple feature strategies and models.
 
@@ -136,13 +142,15 @@ def run_bull_only_cv(
     all_results: List[Dict] = []
 
     for strategy_name, feature_sets in feature_strategies.items():
-        print(f"\n{'='*60}")
-        print(f"Strategy: {strategy_name}")
-        print(f"{'='*60}")
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Strategy: {strategy_name}")
+            print(f"{'='*60}")
 
         for ticker, df in feature_data.items():
             if ticker not in feature_sets:
-                print(f"  [{ticker}] No feature set for this strategy — skipping.")
+                if verbose:
+                    print(f"  [{ticker}] No feature set for this strategy — skipping.")
                 continue
 
             # --- Correct target creation + bull filtering ---
@@ -153,7 +161,8 @@ def run_bull_only_cv(
             )
 
             if bull_df.empty:
-                print(f"  [{ticker}] No bull days after filter (or Regime_Bull missing).")
+                if verbose:
+                    print(f"  [{ticker}] No bull days after filter (or Regime_Bull missing).")
                 continue
 
             # --- Resolve feature columns ---
@@ -161,17 +170,20 @@ def run_bull_only_cv(
             available_features = [f for f in requested_features if f in bull_df.columns]
             missing = set(requested_features) - set(available_features)
             if missing:
-                print(f"  [{ticker}] Warning: features not found in bull data: {missing}")
+                if verbose:
+                    print(f"  [{ticker}] Warning: features not found in bull data: {missing}")
 
             if not available_features:
-                print(f"  [{ticker}] No usable features after filtering.")
+                if verbose:
+                    print(f"  [{ticker}] No usable features after filtering.")
                 continue
 
             cols = available_features + [target_col]
             data = bull_df[cols].dropna()
 
             if len(data) < min_fold_size * 2:
-                print(f"  [{ticker}] Too few bull samples ({len(data)}) for CV.")
+                if verbose:
+                    print(f"  [{ticker}] Too few bull samples ({len(data)}) for CV.")
                 continue
 
             X = data[available_features]
@@ -221,12 +233,13 @@ def run_bull_only_cv(
                     res_df = pd.DataFrame(fold_results)
                     mean_acc = res_df["Accuracy"].mean()
                     all_results.extend(fold_results)
-                    fold_accs = res_df["Accuracy"].tolist()
-                    fold_str = ", ".join(f"{a:.4f}" for a in fold_accs)
-                    print(
-                        f"  [{ticker}] {model_name}: {len(fold_results)} folds | "
-                        f"Acc: [{fold_str}] | Mean: {mean_acc:.4f}"
-                    )
+                    if verbose:
+                        fold_accs = res_df["Accuracy"].tolist()
+                        fold_str = ", ".join(f"{a:.4f}" for a in fold_accs)
+                        print(
+                            f"  [{ticker}] {model_name}: {len(fold_results)} folds | "
+                            f"Acc: [{fold_str}] | Mean: {mean_acc:.4f}"
+                        )
 
     if not all_results:
         return pd.DataFrame()
@@ -276,7 +289,13 @@ def summarize_bull_only(results: pd.DataFrame) -> tuple:
     return summary, best_per_ticker
 
  
-def run_bull_only(feature_data: Dict[str, pd.DataFrame], feature_strategies, *, force_refresh: bool = False) -> tuple:
+def run_bull_only(
+    feature_data: Dict[str, pd.DataFrame],
+    feature_strategies,
+    *,
+    force_refresh: bool = False,
+    verbose: bool = False,
+) -> tuple:
     """Run bull-only CV with all Section 6.2 strategies and default classifiers.
 
     Parameters
@@ -299,7 +318,8 @@ def run_bull_only(feature_data: Dict[str, pd.DataFrame], feature_strategies, *, 
     if not force_refresh:
         cached = _load_bull_cache()
         if not cached.empty:
-            print("Successfully loaded cached bull-only CV results.")
+            if verbose:
+                print("Successfully loaded cached bull-only CV results.")
             summary, best_per_ticker = summarize_bull_only(cached)
             return cached, summary, best_per_ticker
 
@@ -308,10 +328,12 @@ def run_bull_only(feature_data: Dict[str, pd.DataFrame], feature_strategies, *, 
         feature_strategies=feature_strategies,
         target_horizon=1,
         n_splits=config.SPLITS,
+        verbose=verbose,
     )
 
     if results.empty:
-        print("No results produced.")
+        if verbose:
+            print("No results produced.")
         return results, None, None
 
     _save_bull_cache(results)

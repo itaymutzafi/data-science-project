@@ -1,3 +1,5 @@
+"""Public API for the features package."""
+
 from .bear_and_bull import bull_and_bear_check_window_size, evaluate_regime_thresholds, make_regime_features
 from .day_month import add_day_month_features, preprocess_day_feature, preprocess_month_feature
 from .external_market import add_peer_stock_features, peer_stock_correlation, add_auxiliary_features, add_macro_features

@@ -1,26 +1,20 @@
-"""Data access module.
+"""News loading utilities for Hugging Face and Google News sources."""
 
-This module handles data fetching from Hugging Face dataset financial-news-multisource
-"""
-
-from datasets import load_dataset
-from datetime import datetime, date
-from huggingface_hub import login
 import json
-import pandas as pd
-from typing import Any, Optional, Union
-from pathlib import Path
-import feedparser
 import os
 import sys
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Optional, Union
+
+import feedparser
+import pandas as pd
 import requests
+from datasets import load_dataset
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 from src.config import START_DATE, END_DATE, TICKER_TO_COMPANY_MAP, RAW_NEWS_PATH
 
-
-# Access Token since the dataset is protected, insert here or in .env
-# login(os.getenv("HF_TOKEN"))
 
 OUTPUT_XLSX = "data/raw/news_last_5y.xlsx"
 DATASET = "Brianferrell787/financial-news-multisource"
@@ -59,6 +53,7 @@ def extract_date(row: dict[str, Any]) -> Optional[date]:
 
 
 def detect_company(text_lower: str) -> Optional[str]:
+    """Detect mapped company name from lowercase article text."""
     for ticker, company in TICKER_TO_COMPANY_MAP.items():
         if any(k in text_lower for k in [ticker.lower(), company.lower()]):
             return company
@@ -66,10 +61,7 @@ def detect_company(text_lower: str) -> Optional[str]:
 
 
 def parse_extra_fields(row: dict[str, Any]) -> dict:
-    """
-    Parse row['extra_fields'] if present.
-    Handles both JSON strings and dicts; returns {} on failure.
-    """
+    """Parse selected metadata fields from `extra_fields`."""
     raw = row.get("extra_fields")
     extras = {}
 
@@ -83,7 +75,6 @@ def parse_extra_fields(row: dict[str, Any]) -> dict:
     else:
         extras = {}
 
-    # Flatten the fields we want for output
     result = {
         "publication":    extras.get("publication", "") or "",
         "dataset_source": extras.get("dataset_source", "") or "",
@@ -100,6 +91,7 @@ def parse_extra_fields(row: dict[str, Any]) -> dict:
 
 
 def main():
+    """Build and persist the filtered raw news parquet dataset."""
     ds = load_dataset(DATASET, split="train", data_files=DATA_FILES, streaming=True)
 
     rows_scanned = 0
@@ -145,31 +137,13 @@ def main():
     print("Total rows scanned:", rows_scanned)
     print("Good rows saved:", len(rows))
 
-    # FOR DEBUG:
-    # Save also to excel with valid charachters
-    # news_df["text"] = news_df["text"].astype(str).apply(
-    #     lambda x: "".join(ch for ch in x if ord(ch) >= 32)
-    # )
-    # news_df.to_excel(OUTPUT_XLSX, index=False)
-
-    # Split each company to seperate file
-    # print(news_df["company"].value_counts())
-
-    # for company, group in news_df.groupby("company"):
-    #     filename = f"{FOLDER}news_{company.lower()}.parquet"
-    #     group.to_parquet(filename, index=False)
-    #     print(f"Saved {filename} with {len(group)} rows")
-
 
 if __name__ == "__main__":
     main()
 
 
-# Util
 def get_news_df_from_file(file_path: Union[str, Path]) -> pd.DataFrame:
-    """
-    Load news data from CSV or Parquet, accepting either str or Path input.
-    """
+    """Load news data from CSV or Parquet."""
     path_obj = Path(file_path)
 
     if path_obj.suffix == ".csv":
@@ -180,18 +154,15 @@ def get_news_df_from_file(file_path: Union[str, Path]) -> pd.DataFrame:
     return df
 
 
-# From previous source Google News
 def get_google_news_titles(query: str, days: int) -> pd.DataFrame:
-    # "when:Xd" limits to last X days
+    """Fetch recent news titles from Google News RSS."""
     q = query.replace(" ", "+") + f"+when:{days}d"
     url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
     try:
-        # requests uses certifi CA bundle and is more reliable in virtual envs.
         response = requests.get(url, timeout=20)
         response.raise_for_status()
         feed = feedparser.parse(response.content)
     except Exception:
-        # Keep API stable for notebook usage: return an empty, typed DataFrame.
         df = pd.DataFrame(columns=["published", "date", "title", "link", "source"])
         df["date"] = pd.to_datetime(df["date"])
         return df

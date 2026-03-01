@@ -4,7 +4,7 @@ This module provides a centralized factory pattern for retrieving machine learni
 It handles generic initialization as well as model-specific requirements (e.g., input size for LSTMs).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.svm import SVR

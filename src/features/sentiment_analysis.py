@@ -170,12 +170,16 @@ def clean_and_extract_text(row: pd.Series) -> str:
         clean = text.replace('"', '').replace("'", "").strip()
         
         # Check constraints
-        if len(clean) < 4: continue
-        if clean.startswith('http') or clean.count('/') > 2: continue
+        if len(clean) < 4:
+            continue
+        if clean.startswith('http') or clean.count('/') > 2:
+            continue
         
         lower_text = clean.lower()
-        if "subscribe" in lower_text and len(clean) < 20: continue
-        if "click here" in lower_text: continue
+        if "subscribe" in lower_text and len(clean) < 20:
+            continue
+        if "click here" in lower_text:
+            continue
             
         return clean
         
@@ -281,9 +285,12 @@ class SentimentAnalyzer:
             
             scores.append(compound)
             
-            if compound > 0.1: labels.append('positive')
-            elif compound < -0.1: labels.append('negative')
-            else: labels.append('neutral')
+            if compound > 0.1:
+                labels.append("positive")
+            elif compound < -0.1:
+                labels.append("negative")
+            else:
+                labels.append("neutral")
             
         df = df.copy()
         df['sentiment_score'] = scores
@@ -331,9 +338,11 @@ def calculate_market_features(df: pd.DataFrame) -> pd.DataFrame:
     
     def get_context(row):
         d, val = row['date'], row['sentiment_mean']
-        if d not in daily_stats.index: return 0.0
+        if d not in daily_stats.index:
+            return 0.0
         total, n = daily_stats.loc[d]
-        if n <= 1: return 0.0
+        if n <= 1:
+            return 0.0
         return (total - val) / (n - 1)
 
     df['market_sentiment'] = df.apply(get_context, axis=1)
@@ -404,7 +413,8 @@ def get_sentiment_coverage_stats(df: pd.DataFrame) -> pd.DataFrame:
 
 def process_sentiment_timeseries(df: pd.DataFrame) -> pd.DataFrame:
     """Reindexes to continuous daily range and engineers features."""
-    if df.empty: return df
+    if df.empty:
+        return df
     
     df['date'] = pd.to_datetime(df['date'])
     all_dates = pd.date_range(df['date'].min(), df['date'].max(), freq='D')
@@ -772,7 +782,7 @@ def plot_sentiment_coverage_heatmap(daily_sentiment_df: pd.DataFrame) -> None:
     
     # Create Heatmap
     # cmap="Greens" gives a nice progression from white (0%) to dark green (100%)
-    ax = sns.heatmap(pivot.T, cmap="Greens", cbar_kws={'label': 'Coverage %'}, linewidths=0.5, linecolor='#eaeaea')
+    sns.heatmap(pivot.T, cmap="Greens", cbar_kws={"label": "Coverage %"}, linewidths=0.5, linecolor="#eaeaea")
     
     # Format X-axis to show understandable dates (e.g., "Jan 2020")
     # We define labels based on the columns (dates)
@@ -830,7 +840,8 @@ def plot_rolling_sentiment_correlation(
                 continue
                 
             subset = df.sort_index()
-            if len(subset) < window: continue
+            if len(subset) < window:
+                continue
             
             rolling_corr = subset[sentiment_col].rolling(window).corr(subset[return_col])
             
@@ -858,10 +869,8 @@ def plot_rolling_sentiment_correlation(
         for ticker in tickers:
             if 'Ticker' in df.columns:
                 subset = df[df['Ticker'] == ticker].sort_index()
-                label = ticker
             else:
                 subset = df.sort_index()
-                label = "Portfolio"
                 
             if len(subset) < window:
                 continue

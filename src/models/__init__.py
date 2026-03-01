@@ -1,3 +1,5 @@
+"""Public API for the models package."""
+
 from .advanced import LSTMRegressor, XGBoostRegressor, RandomForestModel
 from . import baselines
 from .bear_and_bull_models import run_bull_only_cv, run_bull_only, summarize_bull_only

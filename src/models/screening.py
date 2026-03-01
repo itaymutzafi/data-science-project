@@ -209,7 +209,8 @@ def run_screening(
     for ticker in tickers:
         # Support Dict or DataFrame input
         if isinstance(df, dict):
-            if ticker not in df: continue
+            if ticker not in df:
+                continue
             df_t = df[ticker].dropna(subset=[target_col]).sort_index()
         else:
             df_t = df[df["Ticker"] == ticker].dropna(subset=[target_col]).sort_index()

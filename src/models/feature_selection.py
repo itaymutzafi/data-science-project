@@ -1,3 +1,5 @@
+"""Feature-selection workflows and diagnostics for classification experiments."""
+
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Set, Tuple, Optional
@@ -61,8 +63,10 @@ def forward_feature_selection(
     model,
     ticker: str,
     max_features: int | None = None,
-    n_splits: int = DEF_SPLITS
+    n_splits: int = DEF_SPLITS,
+    verbose: bool = False,
 ):
+    """Run greedy forward selection and track validation accuracy per step."""
     results = []
     selected_features = []
 
@@ -71,7 +75,8 @@ def forward_feature_selection(
     max_features = max_features or len(candidate_features)
 
     for step in range(1, max_features + 1):
-        print(f"[{ticker}] Forward step {step}")
+        if verbose:
+            print(f"[{ticker}] Forward step {step}")
         best_feat = None
         best_score = -np.inf
 
@@ -106,19 +111,26 @@ def forward_feature_selection(
             "Accuracy": best_score,
         })
 
-        print(f"[{ticker}] Added: {best_feat} | Accuracy: {best_score:.4f}")
+        if verbose:
+            print(f"[{ticker}] Added: {best_feat} | Accuracy: {best_score:.4f}")
 
     return pd.DataFrame(results)
 
 
-def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
+def run_feature_selection(
+    dfs: Dict[str, pd.DataFrame] | pd.DataFrame,
+    n_splits: int = DEF_SPLITS,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    """Execute forward selection for each ticker and return full history."""
     dfs = _as_ticker_frame_dict(dfs)
     all_forward_histories = []
 
     for ticker, df in dfs.items():
-        print(f"\n==============================")
-        print(f"Forward selection for {ticker}")
-        print(f"==============================")
+        if verbose:
+            print("\n==============================")
+            print(f"Forward selection for {ticker}")
+            print("==============================")
 
         df = _ensure_binary_target(df, "TargetBinary").dropna()
 
@@ -127,7 +139,8 @@ def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits:
             target_col="TargetBinary",
             model=LogisticRegression(),
             ticker=ticker,
-            n_splits=n_splits
+            n_splits=n_splits,
+            verbose=verbose,
             # max_features=25
         )
 
@@ -138,6 +151,7 @@ def run_feature_selection(dfs: Dict[str, pd.DataFrame] | pd.DataFrame, n_splits:
 
 
 def feature_selection_plot(df: pd.DataFrame):
+    """Plot forward-selection accuracy curves per ticker."""
     plt.figure(figsize=(9, 6))
 
     for ticker in df["Ticker"].unique():
@@ -184,7 +198,8 @@ def feature_selection_plot(df: pd.DataFrame):
     plt.close()
 
 
-def get_best_k_features(df: pd.DataFrame, K: int=10, add_prints: bool = True) -> Dict[str, List[str]]:
+def get_best_k_features(df: pd.DataFrame, K: int = 10, add_prints: bool = False) -> Dict[str, List[str]]:
+    """Return top-K added features per ticker from forward-selection history."""
     best_features = {}
 
     for ticker in df["Ticker"].unique():
@@ -211,8 +226,9 @@ def get_embedding_importance_features(
     target_col: str = "TargetBinary",
     model=None,
     n_splits: int = DEF_SPLITS,
-    add_prints: bool = True
+    add_prints: bool = False
 ):
+    """Select top-k features from embedded importance and report their accuracy."""
     if model is None:
         model = LogisticRegression()
 
@@ -277,6 +293,7 @@ def get_embedding_importance_features(
 def get_experimet_lr_best_features(
     results_cls: pd.DataFrame,
     ticker_diverse_sets: Dict[str, Dict[int, List[str]]],
+    verbose: bool = False,
 ) -> Tuple[Dict[str, List[str]], Dict[str, float]]:
     """
     For each ticker:
@@ -333,7 +350,8 @@ def get_experimet_lr_best_features(
 
         best_features[ticker] = features
         best_accuracy[ticker] = acc
-        print(f"{ticker}: {features}")
+        if verbose:
+            print(f"{ticker}: {features}")
 
     return best_features, best_accuracy
 
@@ -358,6 +376,7 @@ def build_block_count_df(
     embedded_features: Dict[str, List[str]],
     wrapper_features: Dict[str, List[str]],
 ) -> pd.DataFrame:
+    """Aggregate block-level feature counts across three selection strategies."""
     feature_to_block, blocks = build_feature_to_block_map()
 
     exp_counts = count_blocks(experiment_features, feature_to_block)
@@ -377,6 +396,7 @@ def build_block_count_df(
 
 
 def plot_block_usage_stacked(df: pd.DataFrame):
+    """Plot stacked block-usage counts for experiment, embedding, and wrapper sets."""
     plt.figure(figsize=(12, 7))
     bottom = np.zeros(len(df))
     colors = {
@@ -433,6 +453,7 @@ def evaluate_feature_subsets(
     original_features: List[str],
     original_accuracy: float,
 ) -> pd.DataFrame:
+    """Score all candidate subsets for one ticker with walk-forward classification."""
     rows = []
     data = data.dropna()
     original_set = set(original_features)
@@ -477,7 +498,9 @@ def get_subset_results(
     top_features: Dict[str, List[str]],
     dfs: Dict[str, pd.DataFrame],
     original_accuracy: Dict[str, float],
+    verbose: bool = False,
 ):
+    """Return per-ticker subset-evaluation results for provided top-feature sets."""
     all_results = []
 
     for ticker, feature_set in top_features.items():
@@ -485,14 +508,17 @@ def get_subset_results(
         available_features = [f for f in feature_set if f in prepared_df.columns]
         missing_features = [f for f in feature_set if f not in prepared_df.columns]
         if missing_features:
-            print(f"{ticker}: dropped unavailable features {missing_features}")
+            if verbose:
+                print(f"{ticker}: dropped unavailable features {missing_features}")
 
         if not available_features:
-            print(f"{ticker}: no available features left for subset evaluation")
+            if verbose:
+                print(f"{ticker}: no available features left for subset evaluation")
             continue
 
         subsets = powerset(available_features)
-        print(f"{ticker}: {len(subsets)} subsets")
+        if verbose:
+            print(f"{ticker}: {len(subsets)} subsets")
 
         df_subsets = evaluate_feature_subsets(
             data=prepared_df,
@@ -518,15 +544,18 @@ def get_all_top_features(
     forward_results_df: pd.DataFrame,
     dfs: Dict[str, pd.DataFrame],
     ticker_diverse_sets: Dict[str, List[str]],
-    k: int = 3
+    k: int = 3,
+    verbose: bool = False,
 ) -> Dict[str, Set[str]]:
+    """Merge top features from experiment, embedding, and wrapper strategies."""
     all_top_features = {}
     top_embedding_features = get_best_k_features(forward_results_df, k, False)
     top_wrapper_features, _ = get_embedding_importance_features(dfs, k, add_prints=False)
 
     for ticker, exp_features in top_experiment_features.items():
         all_top_features[ticker] = set(exp_features).union(top_embedding_features[ticker], top_wrapper_features[ticker])
-        print(f"{ticker}: {all_top_features[ticker]}")
+        if verbose:
+            print(f"{ticker}: {all_top_features[ticker]}")
     
     return all_top_features
 
@@ -536,8 +565,10 @@ def get_best_accuracy_feature_selection(
     dfs: Dict[str, pd.DataFrame],
     top_experiment_accuracy: Dict[str, float],
     top_10_embedding_accuracy: Dict[str, float],
-    forward_results_df: pd.DataFrame
+    forward_results_df: pd.DataFrame,
+    verbose: bool = False,
 ) -> pd.DataFrame:
+    """Compare strategies and return per-source best accuracy by ticker."""
     rows = []
     wrapper_accuracy = (
         forward_results_df.groupby("Ticker")["Accuracy"]
@@ -552,11 +583,13 @@ def get_best_accuracy_feature_selection(
     }
 
     for top_name, top_features in top_features_strategies.items():
-        print(f"{top_name}:")
+        if verbose:
+            print(f"{top_name}:")
         source_baseline = baseline_by_source.get(top_name, top_experiment_accuracy)
-        subset_results = get_subset_results(top_features, dfs, source_baseline)
+        subset_results = get_subset_results(top_features, dfs, source_baseline, verbose=verbose)
         if subset_results.empty:
-            print(f"{top_name}: no valid subset results\n")
+            if verbose:
+                print(f"{top_name}: no valid subset results\n")
             continue
         best_df = (
             subset_results
@@ -568,7 +601,8 @@ def get_best_accuracy_feature_selection(
             })
         )
         best_subsets_df =  best_df[["Ticker", "BestAccuracy", "SubsetIndex", "Features"]]
-        print(f"Best found: \n{best_subsets_df.to_string(index=False)}\n") 
+        if verbose:
+            print(f"Best found: \n{best_subsets_df.to_string(index=False)}\n") 
 
         for _, row in best_subsets_df.iterrows():
             rows.append({
@@ -605,6 +639,7 @@ def get_best_accuracy_feature_selection(
 
 
 def plot_accuracy_by_strategy(df: pd.DataFrame):
+    """Visualize best strategy accuracy points per ticker and source."""
     plt.figure(figsize=(12, 7))
 
     sources = [
@@ -691,8 +726,10 @@ def forward_feature_selection_per_fold(
     model,
     ticker: str,
     max_features: int | None = None,
-    n_splits: int = SPLITS
+    n_splits: int = SPLITS,
+    verbose: bool = False,
 ) -> pd.DataFrame:
+    """Run greedy forward selection and keep fold-level accuracy trajectories."""
 
     rows = []
     selected_features = []
@@ -702,7 +739,8 @@ def forward_feature_selection_per_fold(
     max_features = max_features or len(candidate_features)
 
     for step in range(1, max_features + 1):
-        print(f"[{ticker}] Forward step {step}")
+        if verbose:
+            print(f"[{ticker}] Forward step {step}")
 
         best_feat = None
         best_mean_score = -np.inf
@@ -742,22 +780,26 @@ def forward_feature_selection_per_fold(
                 "AddedFeature": best_feat,
             })
 
-        print(f"[{ticker}] Added: {best_feat} | Mean Accuracy: {best_mean_score:.4f}")
+        if verbose:
+            print(f"[{ticker}] Added: {best_feat} | Mean Accuracy: {best_mean_score:.4f}")
 
     return pd.DataFrame(rows)
 
 
 def run_forward_selection_per_fold(
     dfs: Dict[str, pd.DataFrame],
-    n_splits: int = SPLITS
+    n_splits: int = SPLITS,
+    verbose: bool = False,
 ) -> pd.DataFrame:
+    """Execute fold-level forward selection for all tickers."""
 
     all_results = []
 
     for ticker, df in dfs.items():
-        print(f"\n==============================")
-        print(f"Forward selection (per fold) for {ticker}")
-        print(f"==============================")
+        if verbose:
+            print("\n==============================")
+            print(f"Forward selection (per fold) for {ticker}")
+            print("==============================")
 
         df = _ensure_binary_target(df, "TargetBinary").dropna()
 
@@ -766,7 +808,8 @@ def run_forward_selection_per_fold(
             target_col="TargetBinary",
             model=LogisticRegression(max_iter=2000, random_state=42),
             ticker=ticker,
-            n_splits=n_splits
+            n_splits=n_splits,
+            verbose=verbose,
         )
 
         all_results.append(hist_df)
@@ -778,6 +821,7 @@ def get_fold_time_ranges(
     df: pd.DataFrame,
     n_splits: int
 ) -> pd.DataFrame:
+    """Return validation date ranges for each time-series split fold."""
     tscv = TimeSeriesSplit(n_splits=n_splits)
     rows = []
 
@@ -799,16 +843,16 @@ def sequential_colors_strong(base_color: str, n: int):
     from a single base color using HLS space.
     """
     r, g, b = mcolors.to_rgb(base_color)
-    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    hue, _lightness, saturation = colorsys.rgb_to_hls(r, g, b)
 
     colors = []
     for i in range(n):
         # lightness: from light to dark
         li = 0.75 - 0.45 * (i / max(n - 1, 1))
         # saturation: slightly increasing
-        si = min(1.0, s + 0.2 * (i / max(n - 1, 1)))
+        si = min(1.0, saturation + 0.2 * (i / max(n - 1, 1)))
 
-        ri, gi, bi = colorsys.hls_to_rgb(h, li, si)
+        ri, gi, bi = colorsys.hls_to_rgb(hue, li, si)
         colors.append((ri, gi, bi))
 
     return colors
@@ -819,6 +863,7 @@ def plot_forward_selection_per_fold(
     dfs: dict,
     n_splits: int = SPLITS,
 ):
+    """Plot accuracy-vs-feature-count curves per fold for each ticker."""
     for ticker in fs_fold_df["Ticker"].unique():
         sub = fs_fold_df[fs_fold_df["Ticker"] == ticker]
 
@@ -1104,20 +1149,25 @@ def build_fold_regime_context_compact_table(fold_context_df: pd.DataFrame) -> pd
 def display_fold_regime_context_tables(
     fold_context_df: pd.DataFrame,
     fold_context_summary_df: pd.DataFrame,
+    verbose: bool = False,
 ) -> None:
     """Display compact fold table and per-ticker summary in notebook-friendly format."""
     compact_df = build_fold_regime_context_compact_table(fold_context_df)
 
-    print("Fold-level diagnostics (5-fold walk-forward):")
     try:
         from IPython.display import display  # type: ignore
-
+        if verbose:
+            print("Fold-level diagnostics (5-fold walk-forward):")
         display(compact_df)
-        print("Per-ticker aggregate diagnostics:")
+        if verbose:
+            print("Per-ticker aggregate diagnostics:")
         display(fold_context_summary_df.round(4))
     except ImportError:
+        if verbose:
+            print("Fold-level diagnostics (5-fold walk-forward):")
         print(compact_df.to_string(index=False))
-        print("Per-ticker aggregate diagnostics:")
+        if verbose:
+            print("Per-ticker aggregate diagnostics:")
         print(fold_context_summary_df.round(4).to_string(index=False))
 
 

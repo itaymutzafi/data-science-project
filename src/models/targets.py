@@ -1,3 +1,5 @@
+"""Target-definition comparison helpers for binary classification experiments."""
+
 import pandas as pd
 from typing import Dict, List
 import matplotlib.pyplot as plt
@@ -8,12 +10,17 @@ from src.config import COMPANY_COLORS, DEF_SPLITS
 
 
 def target_daily(df):
+    """Label day `t` as 1 when next-day log return is positive."""
     return (df["Log_Return"].shift(-1) > 0).astype(int)
 
+
 def target_threshold(df, thr=0.001):
+    """Label day `t` as 1 when next-day log return exceeds a threshold."""
     return (df["Log_Return"].shift(-1) > thr).astype(int)
 
+
 def target_multiday(df, h=3):
+    """Label day `t` as 1 when the next `h` days have positive cumulative return."""
     future_sum = df["Log_Return"].shift(-1).rolling(h).sum()
     return (future_sum.shift(-(h-1)) > 0).astype(int)
 
@@ -34,19 +41,32 @@ def _numeric_target_check_features(df: pd.DataFrame, target_col: str) -> List[st
     ]
 
 
-def check_targets(dfs: Dict[str, pd.DataFrame], n_splits:int = DEF_SPLITS):
+def check_targets(
+    dfs: Dict[str, pd.DataFrame],
+    n_splits: int = DEF_SPLITS,
+    verbose: bool = False,
+):
+    """Compare predefined binary target definitions across all tickers."""
     model = LogisticRegression()
 
-    targets_df = run_model_for_target(dfs, model, n_splits)
+    targets_df = run_model_for_target(dfs, model, n_splits, verbose=verbose)
     evaluation_metrics_target_plt(targets_df)
-    print(avg_accuracy_per_target(targets_df))
+    if verbose:
+        print(avg_accuracy_per_target(targets_df))
 
 
-def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DEF_SPLITS) -> pd.DataFrame:
+def run_model_for_target(
+    dfs: Dict[str, pd.DataFrame],
+    model,
+    n_splits: int = DEF_SPLITS,
+    verbose: bool = False,
+) -> pd.DataFrame:
+    """Evaluate a classification model for each target definition and ticker."""
     all_summary_rows = []
     
     for target_name, target_fn in TARGETS.items():
-        print(f"Checking for target: {target_name}")
+        if verbose:
+            print(f"Checking for target: {target_name}")
         for ticker, df_orig in dfs.items():
             df = df_orig.copy()
             df["TargetBinary"] = target_fn(df)
@@ -97,7 +117,8 @@ def run_model_for_target(dfs: Dict[str, pd.DataFrame], model, n_splits: int = DE
     return pd.DataFrame(all_summary_rows)
 
 
-def evaluation_metrics_target_plt(df):
+def evaluation_metrics_target_plt(df: pd.DataFrame) -> None:
+    """Plot target-definition accuracy points grouped by ticker."""
     metric = "Accuracy"
     plt.figure(figsize=(9, 4))
 
@@ -124,6 +145,7 @@ def evaluation_metrics_target_plt(df):
 
 
 def avg_accuracy_per_target(df: pd.DataFrame) -> pd.DataFrame:
+    """Return average accuracy per target definition."""
     return (
         df
         .groupby("Target", as_index=False)["Accuracy"]

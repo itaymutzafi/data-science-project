@@ -1,3 +1,5 @@
+"""Moving-average and momentum feature utilities."""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
@@ -8,22 +10,15 @@ from src.utils import set_style
 
 
 def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> None:
-    """
-    Adds Moving Average features to the dataframe.
-    
-    Args:
-        dfs: Dictionary of DataFrames.
-        windows: List of window sizes. Defaults to FEATURE_WINDOWS from config.
-    """
+    """Add moving-average columns for configured windows."""
     added = []
-    
+
     for name, df in dfs.items():
         if "Close" in df.columns:
             for win in windows:
                 col_name = f"MA{win}"
-                # Standard causal rolling mean
-                df[col_name] = df['Close'].rolling(window=win).mean()
-                
+                df[col_name] = df["Close"].rolling(window=win).mean()
+
             added.append(name)
 
     print(f"Added Moving Average features: {windows} for {len(added)} stocks.")
@@ -31,36 +26,27 @@ def add_ma_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_W
 
 
 def add_ma_distance_features(dfs: Dict[str, pd.DataFrame], windows: List[int] = FEATURE_WINDOWS) -> List[str]:
-    """
-    Adds Normalized Distance from Moving Averages.
-    Formula: (Price - MA) / MA
-    
-    Dynamically generates columns based on config (e.g. 'Dist_MA50', 'Dist_MA200').
-    """
-    columns = [f'Dist_MA{win}' for win in windows]
+    """Add normalized distance-from-MA features for each window."""
+    columns = [f"Dist_MA{win}" for win in windows]
 
     for name, df in dfs.items():
         for win in windows:
-            ma_col = f'MA{win}'
-            # Ensure baseline MA exists
+            ma_col = f"MA{win}"
             if ma_col not in df.columns:
-                df[ma_col] = df['Close'].rolling(window=win).mean()
-            
-            # Calculate Normalized Distance
-            # Result is a percentage (e.g., 0.05 = 5% above trend)
-            col_name = f'Dist_MA{win}'
-            df[col_name] = (df['Close'] - df[ma_col]) / df[ma_col]
-            
-            # Fill NaNs
+                df[ma_col] = df["Close"].rolling(window=win).mean()
+
+            col_name = f"Dist_MA{win}"
+            df[col_name] = (df["Close"] - df[ma_col]) / df[ma_col]
             df[col_name] = df[col_name].fillna(0)
-        
+
         dfs[name] = df
         print(f"{name}: Adding Features: Dist_MA with windows {windows}")
-    
+
     return columns
 
 
 def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
+    """Add MACD, signal, and histogram features."""
     added = []
     fast = 12
     slow = 26
@@ -85,51 +71,40 @@ def add_macd_feature(dfs: Dict[str, pd.DataFrame]) -> None:
 
 
 def ma_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = FEATURE_WINDOWS) -> None:
-    """
-    Plots Close price against multiple Moving Averages for all companies in a 2x2 grid.
-    Uses specific company colors for the Close price.
-    """    
+    """Plot Close and moving averages for all tickers."""
     num_plots = len(dfs)
     if num_plots == 0:
         return
 
     cols = 2
     rows = math.ceil(num_plots / cols)
-    
+
     fig, axes = plt.subplots(rows, cols, figsize=(14, 7 * rows))
-    axes = axes.flatten()  # Flatten to easy 1D indexing
+    axes = axes.flatten()
 
     for i, (name, df) in enumerate(dfs.items()):
         ax = axes[i]
-        
-        # Determine Color
-        color = COMPANY_COLORS.get(name) or COMPANY_COLORS.get(name.upper(), 'blue')
 
-        # Plot Close Price
-        ax.plot(df.index, df['Close'], label=f"{name} Close", color=color, alpha=0.9, linewidth=1.5)
+        color = COMPANY_COLORS.get(name) or COMPANY_COLORS.get(name.upper(), "blue")
+        ax.plot(df.index, df["Close"], label=f"{name} Close", color=color, alpha=0.9, linewidth=1.5)
 
-        # Plot MAs
         for win in window_sizes:
             ma_col = f"MA{win}"
             if ma_col in df.columns:
-                linestyle = '--' if win < 100 else '-'
+                linestyle = "--" if win < 100 else "-"
                 width = 1.2 if win < 100 else 1.8
                 alpha = 0.7
-                
-                ax.plot(df.index, df[ma_col], label=f"MA {win}", 
-                        linestyle=linestyle, linewidth=width, alpha=alpha)
 
-        ax.set_title(f"{name} - Price Trend", fontsize=12, fontweight='bold')
+                ax.plot(df.index, df[ma_col], label=f"MA {win}", linestyle=linestyle, linewidth=width, alpha=alpha)
+
+        ax.set_title(f"{name} - Price Trend", fontsize=12, fontweight="bold")
         ax.set_xlabel("Date", fontsize=10)
         ax.set_ylabel("Price ($)", fontsize=10)
-        ax.legend(loc='upper left', fontsize=8, frameon=True)
-        ax.grid(True, alpha=0.15, linestyle=':')
-        
-        # Despine
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+        ax.legend(loc="upper left", fontsize=8, frameon=True)
+        ax.grid(True, alpha=0.15, linestyle=":")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
-    # Hide unused subplots
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
 
@@ -138,6 +113,7 @@ def ma_plot(dfs: Dict[str, pd.DataFrame], window_sizes: List[int] = FEATURE_WIND
 
 
 def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
+    """Plot MACD and signal lines for all tickers."""
     plt.figure(figsize=(13, 5))
 
     for name, df in dfs.items():
@@ -146,8 +122,15 @@ def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
             continue
 
         plt.plot(df.index, df["MACD"], color=COMPANY_COLORS[name], linewidth=2, linestyle="-", label=f"{name} MACD")
-        plt.plot(df.index, df["MACD_Signal"], color=COMPANY_COLORS[name], linewidth=1.8, \
-            linestyle="--", alpha=0.85, label=f"{name} Signal")
+        plt.plot(
+            df.index,
+            df["MACD_Signal"],
+            color=COMPANY_COLORS[name],
+            linewidth=1.8,
+            linestyle="--",
+            alpha=0.85,
+            label=f"{name} Signal",
+        )
 
     plt.axhline(0, color="black", linewidth=0.8, alpha=0.6)
     plt.title("MACD & Signal")
@@ -160,42 +143,38 @@ def macd_plot(dfs: Dict[str, pd.DataFrame]) -> None:
 
 
 def plot_ma_distance_grid(dfs: Dict[str, pd.DataFrame], window: int) -> None:
-    """
-    Plots a grid of Trend Distance for all tickers.
-    """
+    """Plot MA-distance trends for all tickers in a grid."""
     set_style()
     tickers = list(dfs.keys())
     n_tickers = len(tickers)
     cols = 2
     rows = math.ceil(n_tickers / cols)
-    
-    dist_col = f'Dist_MA{window}'
-    
+
+    dist_col = f"Dist_MA{window}"
+
     _, axes = plt.subplots(rows, cols, figsize=(14, 3 * rows), sharex=True)
     if n_tickers == 1:
         axes = [axes]
     else:
         axes = axes.flatten()
-    
+
     for i, ticker in enumerate(tickers):
         ax = axes[i]
         df = dfs[ticker]
-        color = COMPANY_COLORS.get(ticker, 'purple')
-        
+        color = COMPANY_COLORS.get(ticker, "purple")
+
         if dist_col in df.columns:
             ax.plot(df.index, df[dist_col], color=color, linewidth=1, alpha=0.9)
-            ax.axhline(0, color='black', linestyle='--', linewidth=0.8, alpha=0.7)
-            ax.set_title(f"{ticker}: {window}-Day Trend Dist", fontweight='bold')
-            if i % cols == 0: ax.set_ylabel("Dist (%)")
-    
-    
-    # Hide unused
+            ax.axhline(0, color="black", linestyle="--", linewidth=0.8, alpha=0.7)
+            ax.set_title(f"{ticker}: {window}-Day Trend Dist", fontweight="bold")
+            if i % cols == 0:
+                ax.set_ylabel("Dist (%)")
+
     for j in range(len(tickers), len(axes)):
-        axes[j].axis('off')
-    
-    # Ensure x-labels are rotated for clarity
+        axes[j].axis("off")
+
     for ax in axes:
-        ax.tick_params(axis='x', rotation=45)
+        ax.tick_params(axis="x", rotation=45)
 
     plt.tight_layout()
     plt.show()

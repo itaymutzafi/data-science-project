@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 class LSTMModel(nn.Module):
+    """Core LSTM network used by the ``LSTMRegressor`` wrapper."""
+
     def __init__(self, input_size: int, hidden_size: int = 64, num_layers: int = 2, output_size: int = 1, dropout: float = 0.2):
         super().__init__()
         self.hidden_size = hidden_size
@@ -33,6 +35,7 @@ class LSTMModel(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Run a forward pass and return the last-step projection."""
         # Initialize hidden state with zeros
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(x.device)

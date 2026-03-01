@@ -1,8 +1,4 @@
-"""Notebook memory utilities.
-
-Helpers for cleaning interactive notebook namespaces while keeping selected
-objects required for downstream sections.
-"""
+"""Notebook namespace cleanup helpers."""
 
 from __future__ import annotations
 
@@ -28,13 +24,12 @@ SECTION61_PHASE_KEEP = {
 
 
 def _is_drop_candidate(value: Any) -> bool:
-    """Return True when an object is a common heavy notebook temporary."""
+    """Return `True` for heavy temporary notebook objects."""
     cls = getattr(value, "__class__", None)
     module_name = getattr(cls, "__module__", "")
     if any(module_name.startswith(prefix) for prefix in ("pandas", "numpy", "matplotlib")):
         return True
 
-    # Drop notebook wrapper objects that hold heavy tabular payloads.
     for attr in ("results", "feature_audit_summary", "feature_set_preview"):
         nested = getattr(value, attr, None)
         nested_cls = getattr(nested, "__class__", None)
@@ -52,16 +47,7 @@ def cleanup_notebook_namespace(
     *,
     keep: Iterable[str] = (),
 ) -> list[str]:
-    """Clean notebook globals and return removed variable names.
-
-    Args:
-        namespace: Mapping to clean (typically ``globals()``). If omitted,
-            uses the caller's global namespace.
-        keep: Variable names to preserve.
-
-    Returns:
-        List[str]: Removed variable names.
-    """
+    """Clean notebook globals and return removed variable names."""
     if namespace is None:
         frame = inspect.currentframe()
         caller_frame = frame.f_back if frame is not None else None
@@ -92,7 +78,7 @@ def cleanup_section62_memory(
     phase: Literal["after_continuous", "final"] = "after_continuous",
     keep_extra: Iterable[str] = (),
 ) -> list[str]:
-    """Preset memory cleanup strategy for Section 6.2 model-zoo notebooks."""
+    """Apply the predefined Section 6.2 notebook cleanup policy."""
     if phase not in SECTION61_PHASE_KEEP:
         raise ValueError(f"Unknown section 6.2 cleanup phase: {phase}")
 

@@ -1,12 +1,11 @@
+"""Shared plotting style and dataframe-normalization helpers."""
+
 from typing import Dict
-from cycler import cycler
+
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
-
-from src.config import (COMPANY_COLORS, TICKER_TO_COMPANY_MAP, DEF_SPLITS)
-from src.utils import statistic_tests as st
+from cycler import cycler
 
 _STYLE_APPLIED = False
 ACADEMIC_PALETTE = ["#1B263B", "#0A9396", "#EE9B00", "#CA6702", "#9B2226"]
@@ -50,12 +49,11 @@ def apply_academic_style(ax: plt.Axes, title: str | None = None) -> None:
 
 
 def ensure_dataframe(data: pd.DataFrame | Dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Helper: Normalize input to a single DataFrame with a Ticker column."""
+    """Normalize dict input into a single dataframe with a `Ticker` column."""
     if isinstance(data, dict):
         processed_frames = []
         for ticker, df in data.items():
             temp = df.copy()
-            # Ensure datetime index and remove timezone for consistent plotting/merging
             if not isinstance(temp.index, pd.DatetimeIndex):
                 temp.index = pd.to_datetime(temp.index)
             if temp.index.tz is not None:

@@ -1,30 +1,33 @@
 #!/bin/bash
-# Completely reset the development environment
+# Recreate the local development environment from scratch.
+
+set -euo pipefail
 
 # Ensure we are in the project root
 cd "$(dirname "$0")/.."
 
-echo "⚠️  Killing any processes using .venv..."
-# Try to kill processes using the .venv directory (Mac/Linux)
-# lsof list open files, grep filters for .venv, awk gets PID, xargs kills
-lsof +D .venv | grep python | awk '{print $2}' | xargs kill -9 2>/dev/null
+echo "[reset] Stopping Python processes that currently use .venv (if any)..."
+PIDS="$(lsof +D .venv 2>/dev/null | awk '/python/ {print $2}' | sort -u || true)"
+if [ -n "$PIDS" ]; then
+    kill -9 $PIDS 2>/dev/null || true
+fi
 
-echo "🗑️  Deleting old .venv..."
+echo "[reset] Removing existing .venv directory..."
 rm -rf .venv
 
-echo "🐍 Creating new .venv..."
-# Using python3 (which appears to be 3.13 on your system)
+echo "[reset] Creating a fresh .venv..."
 python3 -m venv .venv
 
-echo "uq  Activating .venv..."
+echo "[reset] Activating .venv..."
 source .venv/bin/activate
 
-echo "📦 Installing dependencies..."
+echo "[reset] Installing dependencies..."
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install -e .
 pip install ipykernel
 
-echo "⚙️  Registering Kernel..."
+echo "[reset] Registering kernel 'data-science-project'..."
 python -m ipykernel install --user --name=data-science-project --display-name "Python (Data Science Project)"
 
-echo "✅ Done! Please restart VS Code."
+echo "[reset] Completed successfully."

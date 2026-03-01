@@ -1,3 +1,5 @@
+"""Statistical seasonality tests and companion visualizations."""
+
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -9,26 +11,21 @@ from src.config import MONTHNAMES
 
 
 def test_seasonality(df: pd.DataFrame, return_col: str,  time_precision: str, alpha: float = 0.05) -> dict:
-    """
-    Generic seasonality significance testing using datetime-based categories
-    """
+    """Run ANOVA/Kruskal/OLS seasonality tests for a categorical time axis."""
     results = {}
     data = df.copy()
 
     choose_base = sorted(data[time_precision].dropna().unique())
     baseline = choose_base[0]
 
-    # Prepare grouped returns
     grouped_returns = [
         group[return_col].dropna().values
         for _, group in data.groupby(time_precision)
     ]
 
-    # global tests
     f_stat, p_anova = stats.f_oneway(*grouped_returns)
     kw_stat, p_kw = stats.kruskal(*grouped_returns)
 
-    # OLS regression
     model = smf.ols(
         f"{return_col} ~ C({time_precision})",
         data=data
@@ -47,7 +44,6 @@ def test_seasonality(df: pd.DataFrame, return_col: str,  time_precision: str, al
         lambda x: "Higher" if x > 0 else "Lower"
     )
 
-    # design the result
     results["baseline_day"] = baseline
     results["global_tests"] = {
         "anova_F": f_stat,
@@ -62,7 +58,7 @@ def test_seasonality(df: pd.DataFrame, return_col: str,  time_precision: str, al
 
 
 def plot_all_tickers_seasonality(all_results, time_label, ticker_colors, alpha=0.05, feature_name="Return"):
-    """Grouped bar chart of OLS coefficients for all tickers, with significance hatching."""
+    """Plot grouped OLS coefficients for all tickers with significance hatching."""
     tickers = list(all_results.keys())
     n_tickers = len(tickers)
 
@@ -116,8 +112,9 @@ def plot_all_tickers_seasonality(all_results, time_label, ticker_colors, alpha=0
     plt.tight_layout()
     plt.show()
 
+
 def seasonality_summary_table(all_results_day, all_results_month, alpha=0.05):
-    """Single summary DataFrame with global test results for all tickers and both time dimensions."""
+    """Display a styled summary table for day/month seasonality tests."""
     rows = []
     for time_label, all_results in [("Day", all_results_day), ("Month", all_results_month)]:
         for ticker, res in all_results.items():

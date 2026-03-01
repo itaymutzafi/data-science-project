@@ -1,22 +1,24 @@
 #!/bin/bash
-# Re-install Jupyter Kernel for Data Science Project
+# Register the project Jupyter kernel from an existing virtual environment.
+
+set -euo pipefail
 
 # Ensure we are in the project root
 cd "$(dirname "$0")/.."
 
 # Check if .venv exists
 if [ -d ".venv" ]; then
-    echo "Activating virtual environment..."
+    echo "[kernel] Activating virtual environment..."
     source .venv/bin/activate
 else
-    echo "Error: .venv not found!"
+    echo "[kernel] Error: .venv not found."
     exit 1
 fi
 
-echo "Installing ipykernel..."
+echo "[kernel] Installing ipykernel..."
 pip install ipykernel
 
-echo "Registering kernel 'data-science-project'..."
+echo "[kernel] Registering kernel 'data-science-project'..."
 python -m ipykernel install --user --name=data-science-project --display-name "Python (Data Science Project)"
 
-echo "Kernel installation complete."
+echo "[kernel] Kernel installation completed successfully."

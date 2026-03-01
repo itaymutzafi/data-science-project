@@ -5,12 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "data-science-project"
 version = "0.1.0"
-description = "Stock market prediction pipeline"
+description = "Leakage-safe stock return prediction pipeline with market and sentiment signals"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [{name = "Workshop in DS Team 003"}]
-dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["dependencies"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -18,3 +24,5 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

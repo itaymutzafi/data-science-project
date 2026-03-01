@@ -14,12 +14,20 @@ dependencies:
   - xgboost
   - pyarrow
   - jupyter
+  - jupyterlab
   - ipykernel
+  - ipywidgets
+  - plotly
+  - tqdm
   - pytest
   - black
   - pip
   - pip:
       - yfinance>=0.2.30
-      - tqdm>=4.66.0
-      - jupyterlab>=4.0.0
+      - feedparser>=6.0.10
+      - datasets>=2.17.0
+      - huggingface_hub>=0.20.0
+      - torch>=2.0.0
+      - transformers>=4.30.0
+      - prophet>=1.1.5
       # - shap>=0.45.0

@@ -1,8 +1,10 @@
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import TimeSeriesSplit
-from sklearn.base import clone
+"""Walk-forward helpers for binary classification and feature importance."""
+
 import pandas as pd
 import numpy as np
+from sklearn.base import clone
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
 
 from src.evaluation.metrics import evaluate_classification
 from src.config import DEF_SPLITS
@@ -15,9 +17,7 @@ def run_binary_cls_with_feature_importance(
     ticker: str,
     n_splits: int = DEF_SPLITS
 ):
-    """
-    Walk-forward validation based on experiment _run_walk_forward_validation
-    """
+    """Run walk-forward binary classification and return fold-level metrics."""
 
     X = data.drop(columns=[target_col])
     y = data[target_col]
@@ -30,20 +30,16 @@ def run_binary_cls_with_feature_importance(
         X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
-        # Scale Features
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_val_scaled = scaler.transform(X_val)
 
-        # Convert back to DataFrame to preserve column names (helpful for feature importance later)
         X_train_df = pd.DataFrame(X_train_scaled, index=X_train.index, columns=X.columns)
         X_val_df = pd.DataFrame(X_val_scaled, index=X_val.index, columns=X.columns)
 
-        # Train
         model_fold = clone(model)
         model_fold.fit(X_train_df, y_train)
 
-        # Predict
         preds = model_fold.predict(X_val_df)
         preds_series = pd.Series(preds, index=X_val.index)
         preds_series = (preds_series > 0.5).astype(int)
@@ -66,6 +62,7 @@ def run_binary_cls_embedded_importance(
     ticker: str,
     n_splits: int = DEF_SPLITS
 ) -> pd.DataFrame:
+    """Compute per-fold embedded feature importance for a binary model."""
     data = data.dropna()
     X = data.drop(columns=[target_col])
     y = data[target_col]
@@ -77,9 +74,6 @@ def run_binary_cls_embedded_importance(
         X_train = X.iloc[train_idx]
         y_train = y.iloc[train_idx]
 
-        # -----------------------
-        # Scaling (train only)
-        # -----------------------
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
 
@@ -89,15 +83,9 @@ def run_binary_cls_embedded_importance(
             columns=X.columns,
         )
 
-        # -----------------------
-        # Train model
-        # -----------------------
         model_fold = clone(model)
         model_fold.fit(X_train_df, y_train)
 
-        # -----------------------
-        # Embedded importance
-        # -----------------------
         if hasattr(model_fold, "coef_"):
             importance = np.abs(model_fold.coef_).ravel()
 
@@ -105,7 +93,7 @@ def run_binary_cls_embedded_importance(
             importance = model_fold.feature_importances_
 
         else:
-            continue  # model has no embedded importance
+            continue
 
         fold_df = pd.DataFrame({
             "Feature": X.columns,

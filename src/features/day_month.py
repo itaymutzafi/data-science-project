@@ -1,26 +1,26 @@
+"""Calendar-based feature engineering utilities."""
+
 import pandas as pd
 import numpy as np
 from typing import Dict
 
 
 def add_day_month_features(dfs: Dict[str, pd.DataFrame]) -> None:
+    """Add day-name and month features from dataframe indices."""
     added = []
 
     for name, df in dfs.items():
-        df['Day'] = df.index.day_name()
+        df["Day"] = df.index.day_name()
 
-        df['Month'] = df.index.month
+        df["Month"] = df.index.month
 
         added.append(name)
-    
+
     print(f"{added}: Added Day and Month features")
 
 
 def preprocess_day_feature(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Encode day-of-week cyclically using sine and cosine.
-    Requires a 'Day' column with values like 'Monday', 'Tuesday', etc.
-    """
+    """Encode the Day column as cyclical sine and cosine features."""
     if "Day" not in df.columns:
         return df
 
@@ -36,10 +36,7 @@ def preprocess_day_feature(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def preprocess_month_feature(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Encode month cyclically using sine and cosine.
-    Requires a 'Month' column with integer values 1–12.
-    """
+    """Encode the Month column as cyclical sine and cosine features."""
     if "Month" not in df.columns:
         return df
 

@@ -22,6 +22,7 @@ class NaiveBaseline(BaseModel):
         self.strategy = strategy
         
     def fit(self, X: pd.DataFrame, y: pd.Series) -> "NaiveBaseline":
+        """Keep API compatibility; no parameters are learned."""
         # Naive models don't learn from data, but we accept arguments for API consistency.
         return self
         
@@ -164,11 +165,13 @@ class ClassificationBaseline(BaseModel):
         self.majority_class = None
         
     def fit(self, X: pd.DataFrame, y: pd.Series) -> "ClassificationBaseline":
+        """Store majority class when the configured strategy requires it."""
         if self.strategy == "majority":
             self.majority_class = int(y.mode().iloc[0]) if len(y.mode()) > 0 else 1
         return self
         
     def predict(self, X: pd.DataFrame) -> pd.Series:
+        """Generate class predictions according to the selected baseline strategy."""
         if self.strategy == "random":
             return pd.Series(np.random.randint(0, 2, len(X)), index=X.index)
         elif self.strategy == "always_0":
